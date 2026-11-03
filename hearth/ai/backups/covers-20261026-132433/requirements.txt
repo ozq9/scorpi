@@ -1,0 +1,34 @@
+# Scorp runs with the Python standard library alone; each package below unlocks capabilities.
+# setup.bat installs them one by one so a single failure never blocks the rest.
+
+# documents
+pypdf
+pypdfium2
+python-docx
+openpyxl
+python-pptx
+fpdf2
+# data & charts
+pandas
+matplotlib
+# voice: free neural TTS + local speech recognition
+edge-tts
+faster-whisper
+# computer use & system
+pyautogui
+pygetwindow
+uiautomation
+mss
+pyperclip
+psutil
+pillow
+send2trash
+playwright
+# web search
+ddgs
+# HTTPS for phones (microphone needs a secure origin)
+cryptography
+# video understanding (frames)
+opencv-python-headless
+# native window fallback
+pywebview

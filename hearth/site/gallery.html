@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gallery, Scorpi</title>
+<meta name="description" content="Styles, plugins, skills and agents made by people who use Scorpi. Install any of them in your Scorpi with one click.">
+<meta name="theme-color" content="#000000">
+<meta property="og:title" content="The Scorpi gallery">
+<meta property="og:description" content="Styles, plugins, skills and agents made by people who use Scorpi.">
+<meta property="og:image" content="/img/og.png">
+<meta property="og:type" content="website">
+<link rel="icon" href="/img/icon-192.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div class="col">
+
+<header class="bar">
+  <a class="mark" href="/" aria-label="Scorpi, home">scorpi<span class="cursor" aria-hidden="true"></span><span class="tag">beta</span></a>
+  <nav aria-label="Sections">
+    <a href="/#features">Features</a>
+    <a href="/gallery" aria-current="page">Gallery</a>
+    <a href="/#install">Install</a>
+    <a href="/#faq">FAQ</a>
+  </nav>
+  <a class="btn btn-sm" href="/#install">Download</a>
+</header>
+
+<main id="top">
+  <section class="pad gal-head">
+    <h1>Gallery</h1>
+    <p class="sub">Styles, plugins, skills and agents made by people who use Scorpi. Open one to see exactly what it contains, then install it in your Scorpi with one click.</p>
+    <p class="fine">Share your own from the app: Studio → Gallery → Share yours.</p>
+  </section>
+
+  <section class="gal" aria-label="Shared items">
+    <div class="gal-filters pad">
+      <div class="tabs" role="tablist" data-kinds>
+        <button type="button" role="tab" aria-selected="true" data-kind="">All</button>
+        <button type="button" role="tab" aria-selected="false" data-kind="style">Styles</button>
+        <button type="button" role="tab" aria-selected="false" data-kind="plugin">Plugins</button>
+        <button type="button" role="tab" aria-selected="false" data-kind="skill">Skills</button>
+        <button type="button" role="tab" aria-selected="false" data-kind="agent">Agents</button>
+      </div>
+      <input class="gal-q" type="search" placeholder="search" aria-label="Search the gallery" data-q>
+      <div class="tabs" role="tablist" data-sorts>
+        <button type="button" role="tab" aria-selected="true" data-sort="popular">Popular</button>
+        <button type="button" role="tab" aria-selected="false" data-sort="new">New</button>
+      </div>
+    </div>
+    <div class="gal-grid" data-grid></div>
+    <p class="gal-status pad fine" data-status></p>
+    <div class="pad gal-more"><button type="button" class="btn btn-sm" data-more hidden>Show more</button></div>
+  </section>
+</main>
+
+<dialog class="gal-dialog" data-dialog aria-labelledby="galTitle">
+  <div class="gal-d-head">
+    <h2 id="galTitle" data-d-title></h2>
+    <button type="button" class="gal-x" data-close aria-label="Close">×</button>
+  </div>
+  <div class="gal-d-meta fine" data-d-meta></div>
+  <p class="gal-d-desc" data-d-desc></p>
+  <div data-d-body></div>
+  <div class="gal-d-actions">
+    <a class="btn" data-install href="#">Install in Scorpi</a>
+    <a class="btn btn-ghost" data-file href="#" download hidden>Download file</a>
+    <button type="button" class="gal-report fine" data-report>report</button>
+  </div>
+  <p class="fine gal-d-hint">Install opens Scorpi on this PC (localhost:8000) and asks before adding anything. Plugins with code start turned off and agents start paused.</p>
+</dialog>
+
+<footer class="foot pad">
+  <div class="foot-top">
+    <a class="mark" href="/">scorpi</a>
+    <nav aria-label="Footer">
+      <a href="/#install">Install</a>
+      <a href="/#feedback">Feedback</a>
+    </nav>
+  </div>
+  <p class="fine">Everything here was shared by people who use Scorpi. Something wrong with an item? Open it and report it.</p>
+</footer>
+
+</div>
+<script src="/gallery.js" defer></script>
+</body>
+</html>

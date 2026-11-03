@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scorpi, a local-first AI agent for Windows</title>
+<meta name="description" content="Scorpi is a free, local-first AI agent for Windows: chat, live canvas, coding agents, voice and MCP. Bring any model, from Ollama to your own keys.">
+<meta name="theme-color" content="#000000">
+<meta property="og:title" content="Scorpi, a local-first AI agent for Windows">
+<meta property="og:description" content="Chat, live canvas, coding agents and voice in one app. Bring any model.">
+<meta property="og:image" content="/img/og.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/img/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap">
+<link rel="stylesheet" href="/style.css">
+<link rel="preload" as="image" href="/img/shots/home.webp" fetchpriority="high">
+</head>
+<body>
+
+<div class="col">
+
+<p class="beta-strip"><span class="tag">beta</span> Scorpi is in beta. Expect rough edges, and tell us when something breaks. <a href="#feedback">Send feedback</a></p>
+
+<header class="bar">
+  <a class="mark" href="#top" aria-label="Scorpi, back to the top">scorpi<span class="cursor" aria-hidden="true"></span><span class="tag">beta</span></a>
+  <nav aria-label="Sections">
+    <a href="#features">Features</a>
+    <a href="#inside">Screens</a>
+    <a href="/gallery">Gallery</a>
+    <a href="#install">Install</a>
+    <a href="#feedback">Feedback</a>
+    <a href="#faq">FAQ</a>
+  </nav>
+  <a class="btn btn-sm" href="downloads/Scorpi-Setup.exe" data-download>Download</a>
+</header>
+
+<main id="top">
+
+  <section class="hero pad">
+    <h1>A local-first AI agent for Windows</h1>
+    <p class="sub">Chat, live canvas, coding agents and voice in one app. Run models offline with Ollama, use a free cloud tier, or bring your own keys.</p>
+
+    <div class="get" data-tabs>
+      <div class="tabs" role="tablist" aria-label="Ways to install">
+        <button role="tab" id="i-ps" aria-controls="p-ps" aria-selected="true">powershell</button>
+        <button role="tab" id="i-exe" aria-controls="p-exe" aria-selected="false" tabindex="-1">installer</button>
+        <button role="tab" id="i-quiet" aria-controls="p-quiet" aria-selected="false" tabindex="-1">silent</button>
+      </div>
+      <div class="panel" id="p-ps" role="tabpanel" aria-labelledby="i-ps">
+        <code><span class="dim">irm</span> <b data-origin>https://scorpi-atp.pages.dev</b><b>/install.ps1</b> <span class="dim">| iex</span></code>
+        <button class="copy" type="button" aria-label="Copy command">copy</button>
+      </div>
+      <div class="panel" id="p-exe" role="tabpanel" aria-labelledby="i-exe" hidden>
+        <code><b>Scorpi-Setup.exe</b> <span class="dim" data-size>2.4 MB</span></code>
+        <a class="copy" href="downloads/Scorpi-Setup.exe" data-download>download</a>
+      </div>
+      <div class="panel" id="p-quiet" role="tabpanel" aria-labelledby="i-quiet" hidden>
+        <code><b>.\Scorpi-Setup.exe</b> <span class="dim">--quiet --no-desktop --startup</span></code>
+        <button class="copy" type="button" aria-label="Copy command">copy</button>
+      </div>
+    </div>
+    <p class="fine">Public beta, version <span data-version>1.0</span>. Windows 10 and 11. No admin rights. Brings its own Python.</p>
+  </section>
+
+  <!-- the real app answering a real prompt: home screen, typed prompt, then the answer -->
+  <section class="demo" aria-label="Scorpi answering a prompt">
+    <div class="screen demo-screen">
+      <div class="d-start">
+        <img class="d-home" src="/img/shots/home.webp" alt="Scorpi's home screen: Good evening. What shall we make tonight?" width="1600" height="1000" fetchpriority="high">
+        <div class="d-typed" aria-hidden="true"><span class="d-text"></span><span class="d-caret"></span></div>
+        <span class="d-send" aria-hidden="true"></span>
+      </div>
+      <img class="d-answer" src="/img/shots/canvas.webp" alt="Scorpi's answer: a short chat reply with sources next to a live canvas: early November weather, a day-by-day weekend plan, where to stay" width="2000" height="1250">
+    </div>
+    <div class="demo-foot pad">
+      <p class="fine">Fig 1. Prompt: <span class="hi">plan a relaxed weekend in Lisbon for two</span>. It searched the web, checked the November weather and laid the weekend out on the canvas.</p>
+      <button class="replay" type="button" hidden>replay</button>
+    </div>
+  </section>
+
+  <section class="pad" id="features">
+    <h2>What is Scorpi?</h2>
+    <p class="lead">A desktop AI agent that runs on your machine. The app, your chats and your keys stay on your PC; prompts go only to the model provider you choose.</p>
+    <ul class="list">
+      <li><b>Live canvas</b><span>Answers come with charts, maps, tables and cards next to the chat.</span></li>
+      <li><b>Agents</b><span>Coder, Researcher, Writer, Analyst and Operator take bigger jobs in the background. Create your own from chat, with schedules.</span></li>
+      <li><b>Coding</b><span>The Coder builds, runs and fixes projects in its own folder out of the box. Install the open-source OpenCode CLI and it switches to that engine automatically: precise edits, patches, code search, LSP.</span></li>
+      <li><b>GitHub</b><span>Clone your repos or open any folder. A side panel shows every helper agent, a live preview with its console, the diff of each run (undo in one click), a terminal, commits, pull requests and issues the Coder fixes.</span></li>
+      <li><b>Any model</b><span>Ollama, Groq, Gemini, OpenRouter, GitHub Models and more. Falls back to the next model when a free tier runs out.</span></li>
+      <li><b>Voice</b><span>Push to talk with local speech recognition. Interrupt it mid-sentence.</span></li>
+      <li><b>Desktop</b><span>Hold Ctrl + Win over any window and ask about it. Scorpi sees what you mean.</span></li>
+      <li><b>MCP and plugins</b><span>Connect MCP servers over stdio or HTTP. Plugins add panes, commands and hooks.</span></li>
+      <li><b>Phone</b><span>Open it on your phone over Wi-Fi or Tailscale. Your PC does the work; a pairing PIN locks it.</span></li>
+    </ul>
+  </section>
+
+  <section class="inside" id="inside">
+    <div class="pad inside-head">
+      <h2>Screens</h2>
+      <div class="tabs" role="tablist" aria-label="Screens of the app" data-tabs-for="shots">
+        <button role="tab" id="s-agents" aria-controls="v-agents" aria-selected="true">agents</button>
+        <button role="tab" id="s-studio" aria-controls="v-studio" aria-selected="false" tabindex="-1">studio</button>
+        <button role="tab" id="s-voice" aria-controls="v-voice" aria-selected="false" tabindex="-1">voice</button>
+      </div>
+    </div>
+    <div class="views">
+      <figure class="view" id="v-agents" role="tabpanel" aria-labelledby="s-agents">
+        <div class="screen"><img src="/img/shots/agents.webp" alt="The Agents page: example requests and the built-in team of Coder, Researcher, Writer, Analyst and Operator" width="1600" height="1000" loading="lazy"></div>
+        <figcaption class="pad fine">Fig 2. Agents. Hand off a job in chat and follow its progress, or ask for a new agent: <span class="hi">remind me every day at 13:00 to take a break</span>.</figcaption>
+      </figure>
+      <figure class="view" id="v-studio" role="tabpanel" aria-labelledby="s-studio" hidden>
+        <div class="screen"><img src="/img/shots/studio.webp" alt="The Studio: a box to describe a look, and a grid of styles: Mono (the default), Midnight, Paper and Terminal" width="1600" height="1000" loading="lazy"></div>
+        <figcaption class="pad fine">Fig 3. Studio. Every colour, font and radius is a token. Edit them live, or describe a look and Scorpi writes the style.</figcaption>
+      </figure>
+      <figure class="view" id="v-voice" role="tabpanel" aria-labelledby="s-voice" hidden>
+        <div class="screen zoom"><img src="/img/shots/voice.webp" alt="Voice mode: Hold Space, speak, then let go" width="1600" height="1000" loading="lazy"></div>
+        <figcaption class="pad fine">Fig 4. Voice. Hold Space, speak, let go. Speech recognition runs locally with faster-whisper.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="pad">
+    <h2>Under the hood</h2>
+    <ul class="list">
+      <li><b>Python backend</b><span>Runs on the standard library alone. Optional packages unlock documents, charts, voice and computer use, installed one by one so one failure never blocks the rest.</span></li>
+      <li><b>localhost:8000</b><span>The UI is a web app served by your PC, in its own window or any browser.</span></li>
+      <li><b>Providers</b><span>Any OpenAI-compatible <span class="hi">/chat/completions</span> or Anthropic-style <span class="hi">/messages</span> endpoint, plus coding plans.</span></li>
+      <li><b>Permissions</b><span>Reading is allowed by default. Running code, controlling the PC, deleting and sending ask first. Set each tool to Allow, Ask or Off.</span></li>
+      <li><b>Your data</b><span>Chats, settings and keys live in Scorpi's data folder next to the app. Nothing is sent anywhere except the provider you pick.</span></li>
+    </ul>
+    <div class="providers" aria-label="Model providers">
+      <span>Ollama</span><span>Groq</span><span>Google Gemini</span><span>OpenRouter</span><span>GitHub Models</span><span>Mistral</span>
+      <span>Cerebras</span><span>NVIDIA</span><span>Hugging Face</span><span>Cohere</span><span>SambaNova</span><span>OpenAI</span>
+    </div>
+  </section>
+
+  <section class="pad" id="install">
+    <h2>Install</h2>
+    <p class="lead">One 2.4 MB file. It downloads Python and the packages it needs, about 300 MB, into <span class="hi">%LOCALAPPDATA%\Programs\Scorpi</span>.</p>
+    <ol class="setup">
+      <li><img src="/img/shots/setup-welcome.webp" alt="Scorpi Setup: the install folder, a desktop shortcut switch, a start with Windows switch and an Install Scorpi button" width="460" height="600" loading="lazy"><span>Choose folder and shortcuts</span></li>
+      <li><img src="/img/shots/setup-progress.webp" alt="Setting Scorpi up: installing voice, 12 of 30" width="460" height="600" loading="lazy"><span>Packages install one by one</span></li>
+      <li><img src="/img/shots/setup-done.webp" alt="Scorpi is ready. It's in the Start menu." width="460" height="600" loading="lazy"><span>Open it, pick a model</span></li>
+    </ol>
+    <table class="flags">
+      <caption class="fine">Scorpi-Setup.exe flags, for scripts and fleets</caption>
+      <tbody>
+        <tr><th scope="row">--quiet</th><td>Install without a window.</td></tr>
+        <tr><th scope="row">--dir &lt;folder&gt;</th><td>Install somewhere else.</td></tr>
+        <tr><th scope="row">--no-desktop</th><td>Skip the desktop shortcut.</td></tr>
+        <tr><th scope="row">--startup</th><td>Start with Windows, waiting in the tray.</td></tr>
+        <tr><th scope="row">--uninstall --quiet</th><td>Remove Scorpi without a window. Add <span class="hi">--delete-data</span> to remove chats and settings too.</td></tr>
+        <tr><th scope="row">exit code</th><td>0 installed, 3 installed but an optional package failed, 1 failed.</td></tr>
+      </tbody>
+    </table>
+    <div class="install-cta">
+      <a class="btn" href="downloads/Scorpi-Setup.exe" data-download>Download Scorpi-Setup.exe</a>
+      <p class="fine">Beta build. Not code-signed yet. If SmartScreen says <span class="hi">Windows protected your PC</span>, choose More info, then Run anyway. The PowerShell install checks the SHA-256 and skips this prompt.</p>
+    </div>
+  </section>
+
+  <section class="pad" id="feedback">
+    <h2>Feedback</h2>
+    <p class="lead">Scorpi is in beta, and what you send here decides what gets fixed next. Bugs, ideas, things that confused you: every message is read.</p>
+    <form class="fb" novalidate>
+      <fieldset class="kinds">
+        <legend class="fine">What is it about?</legend>
+        <label><input type="radio" name="kind" value="bug" checked><span>bug</span></label>
+        <label><input type="radio" name="kind" value="idea"><span>idea</span></label>
+        <label><input type="radio" name="kind" value="other"><span>other</span></label>
+      </fieldset>
+      <label class="field">
+        <span class="fine">Message</span>
+        <textarea name="message" rows="6" maxlength="4000" required placeholder="What happened, and what did you expect instead?"></textarea>
+      </label>
+      <label class="field">
+        <span class="fine">Email or Discord, if you'd like a reply (optional)</span>
+        <input name="contact" type="text" maxlength="200" autocomplete="email">
+      </label>
+      <label class="trap" aria-hidden="true">Website <input name="website" type="text" tabindex="-1" autocomplete="off"></label>
+      <div class="fb-row">
+        <button class="btn" type="submit">Send feedback</button>
+        <p class="fb-status fine" role="status" aria-live="polite"></p>
+      </div>
+      <p class="fine">Stored with your country and Scorpi version. Your IP address isn't kept, only a one-way hash that stops spam.</p>
+    </form>
+  </section>
+
+  <section class="pad" id="faq">
+    <h2>FAQ</h2>
+    <div class="qa">
+      <details><summary>Is it free?</summary>
+        <p>Yes. Scorpi is free, and it works with free models: local ones through Ollama or the free tiers of cloud providers. Voices, maps, weather and search use free services too. Paid keys are optional.</p></details>
+      <details><summary>Do I need a GPU?</summary>
+        <p>No. With a cloud model any Windows 10 or 11 PC works. A GPU only matters for running models offline.</p></details>
+      <details><summary>Where do my chats and keys go?</summary>
+        <p>They stay in Scorpi's data folder on your PC. Prompts go only to the provider you picked, or nowhere with a local model.</p></details>
+      <details><summary>Can I use my own coding plan or endpoint?</summary>
+        <p>Yes. Add any OpenAI-compatible or Anthropic-style endpoint with your key. Coding plans such as OpenCode Go work as a model provider, and with the OpenCode CLI installed the Coder's full engine runs on any of your keys too, from OpenCode Go to NVIDIA, OpenRouter or Groq.</p></details>
+      <details><summary>Do I need OpenCode for coding?</summary>
+        <p>No. The Coder and the Code section work with Scorpi's own tools. For the full engine, install Node.js and run <span class="hi">npm i -g @opencode/cli</span>; Scorpi picks it up on its own. You can switch between Full and Basic under Connect.</p></details>
+      <details><summary>Can it break things?</summary>
+        <p>Anything that runs code, controls the PC, deletes or sends asks you first. You can set every tool to Allow, Ask or Off.</p></details>
+      <details><summary>How do I uninstall it?</summary>
+        <p>Settings, Apps, Scorpi, Uninstall, or <span class="hi">Scorpi-Setup.exe --uninstall --quiet</span>. You choose whether chats and settings stay.</p></details>
+      <details><summary>How do I verify the download?</summary>
+        <p>Compare <span class="hi">Get-FileHash .\Scorpi-Setup.exe</span> with the SHA-256 at the bottom of this page. The PowerShell install does this for you.</p></details>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot pad">
+  <div class="foot-top">
+    <span class="mark">scorpi</span>
+    <nav aria-label="Footer">
+      <a href="#install">Install</a>
+      <a href="/version.json">version.json</a>
+      <a href="/install.ps1">install.ps1</a>
+    </nav>
+  </div>
+  <p class="fine hash" data-hash>SHA-256 of Scorpi-Setup.exe</p>
+</footer>
+
+</div>
+
+<!-- shown before every download: it's a beta -->
+<dialog class="beta-dialog" aria-labelledby="bd-title">
+  <div class="bd-step" data-step="warn">
+    <h2 id="bd-title">Scorpi is in beta</h2>
+    <p>It works, but you will hit rough edges. Features change between versions and some things will break.</p>
+    <p>Your chats and settings stay on your PC. Running code, deleting and sending ask you first, but keep backups of anything important you let Scorpi work on.</p>
+    <p>Feedback is highly appreciated. If something breaks or feels wrong, tell us; it takes a minute and it's what shapes Scorpi.</p>
+    <div class="bd-actions">
+      <a class="btn" href="downloads/Scorpi-Setup.exe" download data-download data-confirmed>Download the beta</a>
+      <button class="bd-cancel" type="button">Cancel</button>
+    </div>
+    <p class="fine">Scorpi-Setup.exe, <span data-size>2.4 MB</span>, version <span data-version>1.0</span> beta</p>
+  </div>
+  <div class="bd-step" data-step="thanks" hidden>
+    <h2>Download started</h2>
+    <p>Once you've tried it, tell us how it went. Even one line helps.</p>
+    <div class="bd-actions">
+      <a class="btn" href="#feedback" data-close>Send feedback</a>
+      <button class="bd-cancel" type="button">Close</button>
+    </div>
+  </div>
+</dialog>
+
+<script src="/main.js" defer></script>
+</body>
+</html>

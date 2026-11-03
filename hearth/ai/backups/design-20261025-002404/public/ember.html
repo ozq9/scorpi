@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" class="ember-overlay" data-theme="auto" data-accent="moss">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ember</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="/css/app.css">
+<script>
+  // same appearance as the main window
+  try {
+    const p = JSON.parse(localStorage.getItem('hearth.prefs') || '{}');
+    const root = document.documentElement;
+    if (p.theme) root.dataset.theme = p.theme;
+    if (p.accent) root.dataset.accent = p.accent;
+    if (p.motion === 'reduced') root.dataset.motion = 'reduced';
+  } catch (e) {}
+  if (document.documentElement.dataset.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.classList.add('is-dark');
+  }
+</script>
+</head>
+<body>
+<svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a3.8 3.8 0 005.4 0l3-3a3.8 3.8 0 00-5.4-5.4l-1 1M14 10a3.8 3.8 0 00-5.4 0l-3 3a3.8 3.8 0 005.4 5.4l1-1"/></symbol>
+</svg>
+<div id="ember"></div>
+<script type="module" src="/js/ember.js"></script>
+</body>
+</html>

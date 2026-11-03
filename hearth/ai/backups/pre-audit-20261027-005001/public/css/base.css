@@ -1,0 +1,102 @@
+/* ==========================================================================
+   Scorp design system — base: reset, type, icons, crisp rendering, helpers
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+html {
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: var(--w-regular) var(--t-base) / var(--lh-body) var(--font-ui);
+  letter-spacing: var(--track-body);
+  /* crisp text: real kerning and ligatures, optical sizes from the variable font, no synthetic bold */
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  font-synthesis: none;
+  font-feature-settings: "cv11", "ss03", "calt";
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: var(--w-bold); letter-spacing: var(--track-tight); line-height: var(--lh-tight); text-wrap: balance; }
+p, li { text-wrap: pretty; }
+button, input, textarea, select { font: inherit; color: inherit; letter-spacing: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; }
+a { color: inherit; text-decoration: none; }
+img, video { max-width: 100%; }
+/* icons: 1.6px strokes on a 24 grid draw sharp at 16–20px */
+svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; shape-rendering: geometricPrecision; }
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+.hidden { display: none !important; }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.mono { font-family: var(--font-mono); font-size: .86em; letter-spacing: -.01em; font-variant-ligatures: none; }
+.grow { flex: 1; min-width: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.desk-only { }
+
+::selection { background: color-mix(in oklab, var(--accent) 30%, transparent); color: var(--ink); }
+:focus { outline: none; }
+:focus-visible { outline: none; box-shadow: var(--focus); border-radius: var(--r-2); }
+input:focus-visible, textarea:focus-visible, select:focus-visible { box-shadow: none; }
+
+/* scrollbars: a slim pill that floats in the gutter, quiet until you reach for it — no arrows, no track.
+   Chromium draws ::-webkit-scrollbar only while scrollbar-width / scrollbar-color are unset, so those are Firefox-only */
+::-webkit-scrollbar { width: 12px; height: 12px; background: transparent; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+::-webkit-scrollbar-thumb {
+  min-height: 40px;
+  border-radius: 12px;
+  border: 4px solid transparent;
+  background: color-mix(in oklab, var(--ink) 12%, transparent) padding-box;
+}
+:hover::-webkit-scrollbar-thumb { background-color: color-mix(in oklab, var(--ink) 22%, transparent); }
+::-webkit-scrollbar-thumb:hover { border-width: 3px; background-color: color-mix(in oklab, var(--ink) 34%, transparent); }
+::-webkit-scrollbar-thumb:active { border-width: 3px; background-color: color-mix(in oklab, var(--ink) 46%, transparent); }
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: color-mix(in oklab, var(--ink) 22%, transparent) transparent; }
+}
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 5px;
+  font: 500 10.5px/1 var(--font-mono);
+  color: var(--faint);
+  background: var(--fill-1);
+  box-shadow: inset 0 0 0 1px var(--line-2), inset 0 -1px 0 var(--line-2);
+  white-space: nowrap;
+}
+
+/* shared keyframes */
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+@keyframes pop-in { from { opacity: 0; transform: translateY(4px) scale(.97); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes blink { 50% { opacity: .3; } }
+@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+@keyframes halo { from { transform: scale(.9); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+@keyframes breathe { 50% { box-shadow: 0 0 0 5px var(--accent-soft); } }
+@keyframes dot-pop { from { transform: scale(.3); } }
+@keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+
+/* reduced motion: system setting or Settings → Appearance */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) *, :root:not([data-motion="full"]) *::before, :root:not([data-motion="full"]) *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+:root[data-motion="reduced"] *, :root[data-motion="reduced"] *::before, :root[data-motion="reduced"] *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }

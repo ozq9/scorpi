@@ -1,0 +1,14 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+
+/downloads/*
+  Content-Disposition: attachment
+  Cache-Control: public, max-age=3600
+
+/version.json
+  Cache-Control: no-cache
+
+/img/*
+  Cache-Control: public, max-age=604800

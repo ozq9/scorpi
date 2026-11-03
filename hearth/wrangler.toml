@@ -1,0 +1,12 @@
+# Cloudflare Pages project for the Scorpi website (site/). Deploy with:
+#   npx wrangler pages deploy
+name = "scorpi"
+pages_build_output_dir = "./site"
+compatibility_date = "2026-10-01"
+
+# Feedback from the site's form (functions/api/feedback.js). Read it at /admin.html with the ADMIN_KEY secret,
+# or: npx wrangler d1 execute scorpi-feedback --remote --command "select * from feedback order by id desc"
+[[d1_databases]]
+binding = "DB"
+database_name = "scorpi-feedback"
+database_id = "d2f871d8-7d23-4d5f-bd2d-1c7308d7dec3"

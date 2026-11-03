@@ -1,0 +1,108 @@
+{
+ "active": "studio-wood",
+ "styles": {
+  "studio-wood": {
+   "id": "studio-wood",
+   "name": "Studio wood",
+   "description": "Warm wood look: dark walnut background, honey-cream ink, amber accent and a serif headline face",
+   "vars": {
+    "--bg": "#2a1c12",
+    "--ink": "#f3e4cc",
+    "--ink-2": "#dcc4a0",
+    "--muted": "#b59a74",
+    "--faint": "#8c7456",
+    "--accent": "#c8914f",
+    "--accent-ink": "#24170d",
+    "--line": "rgba(243,228,204,.16)",
+    "--line-2": "rgba(243,228,204,.09)",
+    "--glass": "rgba(255,226,180,.06)",
+    "--glass-2": "rgba(255,226,180,.11)",
+    "--glass-edge": "rgba(243,228,204,.15)",
+    "--glass-blur": "blur(18px) saturate(120%)",
+    "--composer-bg": "rgba(52,35,22,.78)",
+    "--menu-bg": "#35241a",
+    "--sheet-bg": "#35241a",
+    "--slip-bg": "rgba(200,145,79,.22)",
+    "--ok": "#9fb46e",
+    "--warn": "#e2aa4c",
+    "--danger": "#d4694f",
+    "--info": "#8fb0a6",
+    "--sc-hi": "#e8c395",
+    "--sc-mid": "#b9864f",
+    "--sc-lo": "#6e4a2a",
+    "--sc-sting": "#4a2e18",
+    "--sc-cheek": "#d98a6a",
+    "--font-ui": "'Inter', system-ui, sans-serif",
+    "--font-display": "'Newsreader', Georgia, serif",
+    "--round": "0.8"
+   },
+   "css": "",
+   "fonts": [
+    "Inter",
+    "Newsreader"
+   ],
+   "created": 1792972759.534763,
+   "updated": 1792972759.534763
+  },
+  "studio-honey": {
+   "id": "studio-honey",
+   "name": "Studio honey",
+   "description": "Warm honey look: pale golden background, deep brown ink, amber accents, soft glass",
+   "vars": {
+    "--bg": "#fbf1d6",
+    "--ink": "#3b2a10",
+    "--ink-2": "#5a4220",
+    "--muted": "#7a5e2e",
+    "--faint": "#9a7d4a",
+    "--accent": "#d9900f",
+    "--accent-ink": "#2b1a05",
+    "--line": "rgba(59,42,16,.16)",
+    "--line-2": "rgba(59,42,16,.08)",
+    "--glass": "rgba(255,248,226,.62)",
+    "--glass-2": "rgba(255,240,200,.8)",
+    "--glass-edge": "rgba(217,144,15,.28)",
+    "--composer-bg": "rgba(255,248,226,.8)",
+    "--menu-bg": "rgba(255,246,220,.94)",
+    "--sheet-bg": "rgba(255,248,226,.97)",
+    "--slip-bg": "rgba(240,205,120,.35)",
+    "--ok": "#5f8a1e",
+    "--warn": "#c26a00",
+    "--danger": "#b23a1e",
+    "--info": "#8a6a1e",
+    "--sc-hi": "#e8c395",
+    "--sc-mid": "#b9864f",
+    "--sc-lo": "#6e4a2a",
+    "--sc-sting": "#4a2e18",
+    "--sc-cheek": "#d98a6a",
+    "--font-ui": "\"Inter Tight\", system-ui, sans-serif",
+    "--glass-blur": "blur(40px) saturate(165%)",
+    "--font-display": "\"Inter\", system-ui, sans-serif",
+    "--font-mono": "\"JetBrains Mono\", ui-monospace, monospace",
+    "--chat-w": "800px",
+    "--round": "0.75",
+    "--fs": "12px"
+   },
+   "css": "",
+   "fonts": [
+    "Inter",
+    "Newsreader",
+    "IBM Plex Mono",
+    "Fira Code"
+   ],
+   "created": 1792972776.0062418,
+   "updated": 1792973151.7760944
+  }
+ },
+ "plugins": {
+  "game": {
+   "id": "game",
+   "name": "game",
+   "description": "Adds a /game command that finds an installed game on the PC (Steam, Start menu) that fits the user's mood and launches it in chat.",
+   "css": "",
+   "js": "scorp.command({\n  name: 'game',\n  description: 'Findet ein installiertes Spiel, das zu dir passt, und startet es',\n  run(args) {\n    const mood = (args || '').trim();\n    const moodPart = mood ? `Meine Stimmung oder Wunsch: ${mood}.` : 'W\u00e4hle etwas, das gerade zu meiner Stimmung und Uhrzeit passt.';\n    scorp.ask(`Skill /game: Suche auf diesem PC nach einem installierten Spiel (Steam-Bibliothek, Startmen\u00fc, Epic/GOG, sonst Programme mit Spielnamen) und w\u00e4hle eines aus, das mir gerade gefallen k\u00f6nnte. ${moodPart} Nenne mir kurz deine Wahl mit einer Begr\u00fcndung und starte das Spiel danach direkt mit launch_app. Falls nichts Passendes installiert ist, sag das ehrlich und schlage ein Browser-Spiel vor.`);\n  }\n});",
+   "enabled": true,
+   "created": 1792966716.393345,
+   "updated": 1792966716.393345
+  }
+ }
+}

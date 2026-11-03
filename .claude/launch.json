@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "scorp-site",
+      "runtimeExecutable": "C:\\Users\\ralfm\\Downloads\\hearth\\hearth\\ai\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "C:\\Users\\ralfm\\Downloads\\hearth\\hearth\\site"],
+      "port": 8765
+    },
+    {
+      "name": "scorpi-pages",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\npx.cmd",
+      "runtimeArgs": ["--prefix", "C:\\Users\\ralfm\\Downloads\\hearth\\hearth", "wrangler", "pages", "dev", "--cwd", "C:\\Users\\ralfm\\Downloads\\hearth\\hearth", "--d1", "DB=d2f871d8-7d23-4d5f-bd2d-1c7308d7dec3", "--port", "8788"],
+      "port": 8788
+    },
+    {
+      "name": "scorpi-mono",
+      "runtimeExecutable": "C:\\Windows\\System32\\cmd.exe",
+      "runtimeArgs": ["/c", "set SCORPI_DATA=C:\\Users\\ralfm\\AppData\\Local\\Temp\\scorpi-demo&& C:\\Users\\ralfm\\Downloads\\hearth\\hearth\\scorpi-mono\\.venv\\Scripts\\python.exe C:\\Users\\ralfm\\Downloads\\hearth\\hearth\\scorpi-mono\\server.py"],
+      "port": 8100
+    },
+    {
+      "name": "scorpi-workbench",
+      "runtimeExecutable": "C:\\Windows\\System32\\cmd.exe",
+      "runtimeArgs": ["/c", "set SCORPI_DATA=C:\\Users\\ralfm\\AppData\\Local\\Temp\\scorpi-workbench&& set PORT=8130&& set HTTPS_PORT=8473&& C:\\Users\\ralfm\\Downloads\\hearth\\hearth\\scorpi-mono\\.venv\\Scripts\\python.exe C:\\Users\\ralfm\\Downloads\\hearth\\hearth\\scorpi-mono\\server.py"],
+      "port": 8130
+    }
+  ]
+}

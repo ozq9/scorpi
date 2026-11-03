@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en" class="companion" data-mode="talk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scorpi</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300..800&family=Inter+Tight:wght@500..800&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/companion.css">
+<script>
+  // keys saved while the app had its old name move to scorpi.* once (prefs, sign-in token, studio, …)
+  try {
+    for (const store of [localStorage, sessionStorage]) {
+      for (const key of Object.keys(store)) {
+        const old = ['scorp.', 'hearth.'].find((p) => key.startsWith(p));
+        if (!old) continue;
+        const next = 'scorpi.' + key.slice(old.length);
+        if (store.getItem(next) === null) store.setItem(next, store.getItem(key));
+        store.removeItem(key);
+      }
+    }
+  } catch (e) {}
+  // same appearance as the main window
+  try {
+    const p = JSON.parse(localStorage.getItem('scorpi.prefs') || '{}');
+    const root = document.documentElement;
+    if (p.accent) root.dataset.accent = p.accent;
+    root.dataset.motion = p.motion === 'reduced' ? 'reduced' : 'full';
+    const look = JSON.parse(localStorage.getItem('scorpi.look') || 'null');
+    if (look && look.css) {
+      const tag = document.createElement('style');
+      tag.id = 'look-style';
+      tag.textContent = look.css;
+      document.head.appendChild(tag);
+      root.dataset.scheme = root.dataset.theme = look.scheme;
+    }
+  } catch (e) {}
+</script>
+</head>
+<body>
+<svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M13.5 4.5h6v6M19.5 4.5L11 13M17.5 14v4a1.5 1.5 0 01-1.5 1.5H6A1.5 1.5 0 014.5 18V8A1.5 1.5 0 016 6.5h4"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.3 2.3 3.4 5 3.4 8s-1.1 5.7-3.4 8c-2.3-2.3-3.4-5-3.4-8S9.7 6.3 12 4z"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="11.5" rx="2.5"/><path d="M9 20h6M12 16v4"/></symbol>
+  <symbol id="i-voice" viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></symbol>
+  <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6.5" cy="17.5" r="2"/><circle cx="17.5" cy="6.5" r="2"/><path d="M8.5 17.5h6.2a2.8 2.8 0 000-5.5H9.3a2.8 2.8 0 010-5.5h6.2"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4.5 12.2c0-4 3.4-7.2 7.5-7.2s7.5 3.2 7.5 7.2-3.4 7.1-7.5 7.1c-1 0-2-.2-2.9-.5L5 20l1-3.6c-.9-1.2-1.5-2.6-1.5-4.2z"/></symbol>
+  <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="11" rx="2.5"/><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7.5 14h9"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M14.5 4.5l5 5-2.6.9-3.3 3.3.4 3.8-1.5 1.5-3.2-3.2L5 20l4.2-4.3L6 12.5 7.5 11l3.8.4 3.3-3.3z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4.5 11L12 4.5l7.5 6.5V19a1 1 0 01-1 1h-4.5v-5h-4v5H5.5a1 1 0 01-1-1z"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></symbol>
+</svg>
+<div id="companion"></div>
+<div class="toasts" id="toasts"></div>
+<script type="module" src="/js/companion.js"></script>
+</body>
+</html>

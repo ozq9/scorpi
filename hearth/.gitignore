@@ -1,0 +1,17 @@
+# Scorp runtime data (chats, settings with keys, workspace, certificates)
+ai/data/
+ai/config.json
+ai/.venv/
+scorpi-mono/data/
+scorpi-mono/config.json
+scorpi-mono/.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Wrangler's local cache
+.wrangler/
+
+# installer build output
+installer/obj/
+installer/Scorpi-Setup.exe

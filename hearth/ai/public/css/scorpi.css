@@ -1,0 +1,245 @@
+/* ==========================================================================
+   Scorpi — the companion (lib/mascot.js): smooth vectors, porcelain white, glossy eyes.
+   Colours are tokens, so a style made in the Studio can recolour it.
+   ========================================================================== */
+
+.mascot {
+  --size: 48px;
+  --sc-hi: #FFFFFF;
+  --sc-mid: #EEF0F5;
+  --sc-lo: #BFC4D0;
+  --sc-edge: rgba(40, 44, 60, .28);
+  --sc-limb: #C9CDD8;
+  --sc-eye: #0B0C10;
+  --sc-eye-hi: #3A3F52;
+  --sc-sting: #FF8FAE;
+  --sc-sting-hi: #FFD6E1;
+  --sc-cheek: #FF9DB8;
+  --sc-mouth: #1A1C24;
+  width: var(--size);
+  height: var(--size);
+  display: block;
+  overflow: visible;
+  fill: none;
+  stroke: none;
+  flex: none;
+  shape-rendering: geometricPrecision;
+}
+.mascot * { transform-box: view-box; }
+.m-c-hi { stop-color: var(--sc-hi); }
+.m-c-mid { stop-color: var(--sc-mid); }
+.m-c-lo { stop-color: var(--sc-lo); }
+.m-c-eye { stop-color: var(--sc-eye); }
+.m-c-eye-hi { stop-color: var(--sc-eye-hi); }
+.m-c-sting { stop-color: var(--sc-sting); }
+.m-c-sting-hi { stop-color: var(--sc-sting-hi); }
+.m-c-cloud-hi { stop-color: var(--sc-cloud-hi, #FFFFFF); stop-opacity: .98; }
+.m-c-cloud-lo { stop-color: var(--sc-cloud-lo, #DDE2EE); stop-opacity: .97; }
+.m-c-cloud-back-hi { stop-color: var(--sc-cloud-back-hi, #EEF0F6); stop-opacity: .94; }
+.m-c-cloud-back-lo { stop-color: var(--sc-cloud-back-lo, #BFC6D6); stop-opacity: .92; }
+.m-cloud-shine ellipse { fill: #fff; opacity: .75; }
+
+/* on a cloud: the whole thing floats; the puffs drift a little on their own */
+.mascot.on-cloud .m-float { animation: m-floaty 4.2s var(--ease-in-out, ease-in-out) infinite; }
+.mascot.on-cloud .m-cloud-front { animation: m-puff 5.4s var(--ease-in-out, ease-in-out) infinite; }
+.mascot.on-cloud .m-cloud-back { animation: m-puff 6.2s .6s var(--ease-in-out, ease-in-out) infinite reverse; }
+.mascot.on-cloud[data-mood="sleeping"] .m-float { animation-duration: 7s; }
+@keyframes m-floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.4px); } }
+@keyframes m-puff { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(.5px, .4px); } }
+
+.m-part { stroke: var(--sc-edge); stroke-width: .6; }
+.m-limb { stroke: var(--sc-limb); stroke-width: 3.4; stroke-linecap: round; fill: none; }
+.m-legs path { stroke: var(--sc-limb); stroke-width: 2.6; stroke-linecap: round; }
+.m-seg { stroke: rgba(40, 44, 60, .14); stroke-width: .8; stroke-linecap: round; fill: none; }
+.m-crease { stroke: rgba(40, 44, 60, .3); stroke-width: .7; stroke-linecap: round; fill: none; }
+.m-shine { fill: #fff; opacity: .85; }
+.m-sting { stroke: rgba(120, 40, 70, .22); stroke-width: .5; }
+.m-barb { fill: var(--sc-sting); stroke: rgba(120, 40, 70, .25); stroke-width: .4; }
+.m-shadow { fill: #fff; opacity: .07; transform-origin: 32px 58.6px; animation: m-shadow 3.6s var(--ease-in-out, ease-in-out) infinite; }
+.m-iris { stroke: none; }
+.m-glint { fill: #fff; }
+.m-glint-2 { opacity: .8; }
+.m-cheek ellipse { fill: var(--sc-cheek); opacity: .5; transition: opacity .4s; }
+.m-lids path { stroke: var(--sc-mouth); stroke-width: 1.5; stroke-linecap: round; fill: none; }
+.m-lids { opacity: 0; transition: opacity .12s; }
+.m-mouth { opacity: 0; transition: opacity .16s; transform-box: fill-box; transform-origin: center; }
+.m-smile, .m-flat, .m-sad { stroke: var(--sc-mouth); stroke-width: 1.2; stroke-linecap: round; fill: none; }
+.m-mouth-in { fill: var(--sc-mouth); }
+.m-tongue { fill: var(--sc-cheek); }
+.m-o { fill: var(--sc-mouth); }
+
+/* rig: pivots for every moving part */
+.m-hop { transform-origin: 32px 58px; }
+.m-body { transform-origin: 32px 57px; animation: m-breathe 3.6s var(--ease-in-out, ease-in-out) infinite; }
+.m-tail { transform-origin: 43px 39px; animation: s-sway 4.2s var(--ease-in-out, ease-in-out) infinite; transition: transform .5s var(--spring); }
+.m-arm-l, .m-arm-r { transition: transform .45s var(--spring); }
+.m-legs { transform-origin: 32px 55px; }
+.m-face { transform: translate(calc(var(--gx, 0) * .9px), calc(var(--gy, 0) * .7px)); transition: transform .5s var(--ease-out); }
+.m-eyes { transform: translate(calc(var(--gx, 0) * 1.3px), calc(var(--gy, 0) * 1.1px)); transition: transform .28s var(--ease-out); }
+.m-eye { transform-box: fill-box; transform-origin: center; transition: transform .09s var(--ease-out), opacity .12s; }
+
+/* effects */
+.m-fx > * { opacity: 0; transition: opacity .35s; }
+.m-fx * { transform-box: fill-box; transform-origin: center; }
+.m-fx .m-sparks { transform-box: view-box; transform-origin: 32px 30px; }
+.m-think circle { fill: rgba(255, 255, 255, .82); }
+.m-zzz path { stroke: rgba(255, 255, 255, .7); stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.m-sparks path { fill: #fff; }
+.m-drop { fill: #9CCBFF; }
+.m-bang rect, .m-bang circle { fill: var(--warn, #FFC56E); }
+.m-waves path { stroke: rgba(255, 255, 255, .75); stroke-width: 1.3; stroke-linecap: round; fill: none; }
+
+/* eyes & mouth for the mood */
+.mascot[data-eyes="happy"] .m-eye, .mascot[data-eyes="shut"] .m-eye { opacity: 0; }
+.mascot[data-eyes="happy"] .m-lids-happy, .mascot[data-eyes="shut"] .m-lids-shut { opacity: 1; }
+.mascot[data-mouth="smile"] .m-smile, .mascot[data-mouth="flat"] .m-flat, .mascot[data-mouth="sad"] .m-sad,
+.mascot[data-mouth="grin"] .m-grin, .mascot[data-mouth="o"] .m-o { opacity: 1; }
+.mascot.blink .m-eye { transform: scaleY(.08); }
+
+/* moods */
+.mascot[data-mood="thinking"] .m-body { animation: m-ponder 3.2s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="thinking"] .m-tail { animation: s-curl 2.6s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="thinking"] .m-think { opacity: 1; }
+.mascot[data-mood="thinking"] .m-think circle { animation: m-bubble 1.8s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="thinking"] .m-think circle:nth-child(2) { animation-delay: .22s; }
+.mascot[data-mood="thinking"] .m-think circle:nth-child(3) { animation-delay: .44s; }
+.mascot[data-mood="thinking"] .m-arm-r { transform: rotate(-26deg) translate(-2px, 1px); }
+
+.mascot[data-mood="writing"] .m-body { animation: m-bob 1.1s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="writing"] .m-arm-r .m-finger { animation: s-snip-r .6s var(--ease-in-out, ease-in-out) infinite; }
+
+.mascot[data-mood="working"] .m-body { animation: m-bob .7s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="working"] .m-eye { transform: scaleY(.78); }
+.mascot[data-mood="working"] .m-tail { animation: s-wiggle .55s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="working"] .m-arm-l .m-finger { animation: s-snip .5s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="working"] .m-arm-r .m-finger { animation: s-snip-r .5s .25s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="working"] .m-legs { animation: s-scuttle .28s steps(2) infinite; }
+.mascot[data-mood="working"] .m-sparks { opacity: 1; animation: m-orbit 4s linear infinite; }
+.mascot[data-mood="working"] .m-sparks path { animation: m-twinkle 1.2s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="working"] .m-sparks path:nth-child(2) { animation-delay: .4s; }
+.mascot[data-mood="working"] .m-sparks path:nth-child(3) { animation-delay: .8s; }
+
+.mascot[data-mood="happy"] .m-cheek ellipse, .mascot[data-mood="shy"] .m-cheek ellipse { opacity: .9; }
+.mascot[data-mood="happy"] .m-body { animation: m-bounce .8s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="happy"] .m-arm-l { animation: s-cheer .5s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="happy"] .m-arm-r { animation: s-cheer-r .5s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="happy"] .m-tail { animation: s-wiggle .4s var(--ease-in-out, ease-in-out) infinite; }
+
+.mascot[data-mood="sad"] .m-body { animation: m-droop 4s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="sad"] .m-arm-l { transform: rotate(-14deg) translateY(3px); }
+.mascot[data-mood="sad"] .m-arm-r { transform: rotate(14deg) translateY(3px); }
+.mascot[data-mood="sad"] .m-tail { animation: none; transform: rotate(18deg) translateY(3px); }
+.mascot[data-mood="sad"] .m-drop { opacity: 1; animation: m-sweat 2.6s var(--ease-out) infinite; }
+
+.mascot[data-mood="sleeping"] .m-body { animation: m-breathe 5s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="sleeping"] .m-shadow { animation-duration: 5s; }
+.mascot[data-mood="sleeping"] .m-tail { animation: none; transform: rotate(28deg) translate(1px, 5px); }
+.mascot[data-mood="sleeping"] .m-arm-l, .mascot[data-mood="sleeping"] .m-arm-r { transform: translateY(3px); }
+.mascot[data-mood="sleeping"] .m-o { animation: m-snore 5s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="sleeping"] .m-zzz { opacity: 1; }
+.mascot[data-mood="sleeping"] .m-zzz path { animation: m-float 3.2s var(--ease-out) infinite; }
+.mascot[data-mood="sleeping"] .m-zzz path:nth-child(2) { animation-delay: 1.6s; }
+
+.mascot[data-mood="listening"] .m-eye, .mascot[data-mood="curious"] .m-eye { transform: scale(1.08); }
+.mascot[data-mood="listening"] .m-body { animation: m-lean 2.6s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="listening"] .m-tail { animation: s-sway 1.6s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="listening"] .m-waves { opacity: 1; }
+.mascot[data-mood="listening"] .m-waves path { animation: m-ring 1.6s var(--ease-out) infinite; }
+.mascot[data-mood="listening"] .m-waves path:nth-child(even) { animation-delay: .3s; }
+.mascot[data-mood="curious"] .m-body { transform: rotate(-4deg); }
+
+.mascot[data-mood="talking"] .m-body { animation: m-bob 1.4s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="talking"] .m-o { transform: scale(calc(.9 + var(--talk, .3) * .5), calc(.55 + var(--talk, .3) * 1.3)); }
+
+.mascot[data-mood="alert"] .m-eye { transform: scale(1.14); }
+.mascot[data-mood="alert"] .m-tail { animation: none; transform: rotate(-10deg); }
+.mascot[data-mood="alert"] .m-bang { opacity: 1; animation: m-pop .5s var(--spring) both, m-nudge 1.8s .5s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="alert"] .m-arm-l .m-finger { animation: s-snip .7s var(--ease-in-out, ease-in-out) infinite; }
+.mascot[data-mood="alert"] .m-arm-r .m-finger { animation: s-snip-r .7s .35s var(--ease-in-out, ease-in-out) infinite; }
+
+.mascot[data-mood="shy"] .m-arm-l { transform: translate(7px, 6px) rotate(18deg); }
+.mascot[data-mood="shy"] .m-arm-r { transform: translate(-7px, 6px) rotate(-18deg); }
+
+.mascot.hop .m-hop { animation: m-hop .75s var(--ease-out); }
+.mascot.hop .m-shadow { animation: m-hop-shadow .75s var(--ease-out); }
+.mascot.wave .m-arm-l { animation: s-wave 1.2s var(--ease-in-out, ease-in-out); }
+
+@keyframes m-breathe { 50% { transform: scale(.99, 1.018); } }
+@keyframes m-shadow { 50% { transform: scale(.94); opacity: .05; } }
+@keyframes m-ponder { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(2.5deg) scale(.99, 1.015); } }
+@keyframes m-bubble { 0%, 100% { transform: scale(.6); opacity: .35; } 40% { transform: scale(1); opacity: 1; } }
+@keyframes m-bob { 50% { transform: translateY(-1px) scale(1.01, .99); } }
+@keyframes m-orbit { to { transform: rotate(360deg); } }
+@keyframes m-twinkle { 0%, 100% { transform: scale(.5); opacity: .5; } 50% { transform: scale(1.1); opacity: 1; } }
+@keyframes m-bounce { 0%, 100% { transform: none; } 30% { transform: translateY(-2.5px) scale(.97, 1.04); } 60% { transform: scale(1.04, .96); } }
+@keyframes m-droop { 0%, 100% { transform: scale(1.02, .96); } 50% { transform: scale(1.03, .945) translateY(.5px); } }
+@keyframes m-sweat { 0% { transform: translateY(-2px); opacity: 0; } 20%, 75% { opacity: 1; } 100% { transform: translateY(5px); opacity: 0; } }
+@keyframes m-float { 0% { transform: translate(0, 2px) scale(.6); opacity: 0; } 30% { opacity: 1; } 100% { transform: translate(3px, -6px) scale(1.1); opacity: 0; } }
+@keyframes m-snore { 50% { transform: scale(1.15, 1.35); } }
+@keyframes m-ring { 0% { opacity: 0; transform: scale(.7); } 40% { opacity: 1; } 100% { opacity: 0; transform: scale(1.15); } }
+@keyframes m-lean { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(3deg) scale(.99, 1.02); } }
+@keyframes m-pop { from { transform: scale(0); } }
+@keyframes m-nudge { 0%, 30%, 100% { transform: rotate(0); } 10% { transform: rotate(12deg); } 20% { transform: rotate(-10deg); } }
+@keyframes m-hop { 18% { transform: translateY(1px) scale(1.08, .9); } 48% { transform: translateY(-9px) scale(.95, 1.06); } 78% { transform: translateY(0) scale(1.04, .96); } }
+@keyframes m-hop-shadow { 48% { transform: scale(.55); opacity: .03; } }
+@keyframes m-arrive { 0% { opacity: 0; transform: translateY(-26px) scale(.8); } 55% { opacity: 1; transform: translateY(2px) scale(1.06, .92); } 75% { transform: translateY(-2px) scale(.98, 1.03); } }
+@keyframes s-sway { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-5deg); } }
+@keyframes s-curl { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(-12deg) translateY(-1px); } }
+@keyframes s-wiggle { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+@keyframes s-snip { 0%, 100% { transform: none; } 50% { transform: rotate(-28deg); } }
+@keyframes s-snip-r { 0%, 100% { transform: none; } 50% { transform: rotate(28deg); } }
+@keyframes s-cheer { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(-24deg) translateY(-3px); } }
+@keyframes s-cheer-r { 0%, 100% { transform: rotate(6deg); } 50% { transform: rotate(24deg) translateY(-3px); } }
+@keyframes s-scuttle { 50% { transform: translateX(.8px); } }
+@keyframes s-wave { 0%, 100% { transform: none; } 20%, 60% { transform: rotate(-34deg) translateY(-3px); } 40%, 80% { transform: rotate(-10deg); } }
+
+/* music on (Scorpi Radio, Spotify…): an idle Scorpi grooves along — bobs and sways on the beat, claws snap.
+   --beat is the radio's tempo, heard on the device that plays it; anything else gets an easy 120 bpm. */
+html.grooving .mascot[data-mood="idle"] .m-body { animation: m-groove calc(var(--beat, .5s) * 2) var(--ease-in-out, ease-in-out) infinite; }
+html.grooving .mascot[data-mood="idle"] .m-tail { animation: s-groove-tail calc(var(--beat, .5s) * 2) var(--ease-in-out, ease-in-out) infinite; }
+html.grooving .mascot[data-mood="idle"] .m-arm-l .m-finger { animation: s-snip var(--beat, .5s) var(--ease-in-out, ease-in-out) infinite; }
+html.grooving .mascot[data-mood="idle"] .m-arm-r .m-finger { animation: s-snip-r var(--beat, .5s) var(--ease-in-out, ease-in-out) infinite; }
+@keyframes m-groove { 0%, 50%, 100% { transform: translateY(0) rotate(0); } 25% { transform: translateY(-1.8px) rotate(-3.5deg); } 75% { transform: translateY(-1.8px) rotate(3.5deg); } }
+@keyframes s-groove-tail { 0%, 100% { transform: rotate(3deg); } 50% { transform: rotate(-8deg); } }
+
+/* variants */
+.mascot.mini .m-fx, .mascot.mini .m-shadow { display: none; }
+.mascot.face .m-shadow, .mascot.face .m-tail, .mascot.face .m-arm-l, .mascot.face .m-arm-r, .mascot.face .m-legs,
+.mascot.face .m-skin, .mascot.face .m-fx { display: none; }
+
+/* ==========================================================================
+   Where Scorpi lives in the app
+   ========================================================================== */
+.hero-mascot { width: 88px; margin: 0 auto var(--s-6); cursor: pointer; animation: m-arrive 1s var(--ease-out) both; }
+.hero-mascot .mascot { --size: 88px; }
+html.no-ember .perch, html.no-ember .hero-mascot { display: none !important; }
+
+/* on the prompt box: walks along its top edge, can be petted, dragged and right-clicked */
+.perch { position: absolute; left: 28px; bottom: calc(100% - 4px); z-index: 5; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; transform-origin: 50% 100%; transition: opacity var(--d-3) var(--ease), transform var(--d-4) var(--spring); }
+.perch .mascot { --size: 62px; filter: drop-shadow(0 8px 12px color-mix(in oklab, var(--shade) 55%, transparent)); }
+html.scorpi-away .perch { display: none; }
+.sc-body { transition: transform var(--d-3) var(--spring); }
+.sc-body.flip { transform: scaleX(-1); }
+.perch.walking .m-legs { animation: s-scuttle .16s steps(2) infinite; }
+.perch.walking .m-body { animation: sc-step .32s var(--ease-in-out) infinite; }
+.perch.lifted { cursor: grabbing; }
+.perch.lifted .sc-body { transform: translateY(-14px) rotate(-7deg) scale(1.06); }
+.perch.lifted .sc-body.flip { transform: translateY(-14px) rotate(7deg) scale(-1.06, 1.06); }
+.perch.lifted .mascot { filter: drop-shadow(0 14px 12px color-mix(in oklab, var(--shade) 75%, transparent)); }
+.perch.dizzy .mascot { animation: sc-spin .9s var(--ease-out); }
+.perch.dancing .mascot { animation: sc-dance .6s var(--ease-in-out) 4; }
+.perch.leaving .mascot { animation: sc-leave .38s var(--ease) forwards; }
+.perch.arriving .mascot { animation: sc-arrive .8s var(--spring); }
+.sc-heart { position: absolute; left: 50%; top: 4px; width: 12px; height: 11px; margin-left: -6px; pointer-events: none; color: var(--sc-cheek, #FF9DB8); animation: sc-heart 1.1s var(--d, 0ms) var(--ease-out) both; }
+.sc-heart svg { width: 100%; height: 100%; fill: currentColor; stroke: none; filter: drop-shadow(0 0 4px rgba(255, 157, 184, .6)); }
+@keyframes sc-step { 50% { transform: translateY(-1.5px); } }
+@keyframes sc-spin { 30% { transform: rotate(200deg) scale(.9); } 100% { transform: rotate(720deg); } }
+@keyframes sc-dance { 25% { transform: translateY(-6px) rotate(-10deg); } 50% { transform: none; } 75% { transform: translateY(-6px) rotate(10deg); } }
+@keyframes sc-leave { 40% { transform: translateY(-16px) scale(1.15); } 100% { transform: translateY(-60px) scale(.3); opacity: 0; } }
+@keyframes sc-arrive { 0% { transform: translateY(-50px) scale(.4); opacity: 0; } 60% { transform: translateY(2px) scale(1.08, .92); opacity: 1; } }
+@keyframes sc-heart { 0% { opacity: 0; transform: translate(0, 0) scale(.4); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx, 0), -46px) scale(1.1); } }
+@media (max-width: 900px) { .perch { left: 22px; } .perch .mascot { --size: 52px; } }
+
+/* a speech bubble Scorpi can say things in (perch and the desktop companion) */
+.sc-say { position: absolute; left: 50%; bottom: calc(100% + 6px); translate: -50% 0; width: max-content; max-width: 280px; padding: var(--s-4) var(--s-6); border-radius: var(--r-4); background: var(--menu-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-edge); box-shadow: var(--rim), var(--e-2); font-size: var(--t-sm); line-height: 1.45; color: var(--ink); pointer-events: none; animation: pop-in var(--d-3) var(--spring); }
+.sc-say::after { content: ""; position: absolute; left: 50%; top: 100%; width: 10px; height: 10px; margin: -5px 0 0 -5px; rotate: 45deg; background: inherit; border-right: 1px solid var(--glass-edge); border-bottom: 1px solid var(--glass-edge); }

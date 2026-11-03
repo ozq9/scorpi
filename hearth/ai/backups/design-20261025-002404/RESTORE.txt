@@ -1,0 +1,3 @@
+﻿Hearth design backup (20261025-002404)
+
+Restore by copying 'public' back to ai/public and desktop.py back to ai/desktop.py, then restart Hearth.

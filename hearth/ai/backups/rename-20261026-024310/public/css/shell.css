@@ -1,0 +1,341 @@
+/* ==========================================================================
+   Scorp design system — shell
+   Backdrop, the stage and its views, the desktop taskbar, the phone top bar / drawer / tab bar,
+   the frameless window's edges, and the PIN gate.
+   ========================================================================== */
+
+/* ---------- backdrop: the light (WebGL) or a looping video ---------- */
+.backdrop { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; background: var(--bg); }
+.backdrop canvas, .backdrop video { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.backdrop video {
+  object-fit: cover;
+  inset: calc(var(--bg-blur, 0px) * -2);
+  width: calc(100% + var(--bg-blur, 0px) * 4);
+  height: calc(100% + var(--bg-blur, 0px) * 4);
+  filter: blur(var(--bg-blur, 0px)) brightness(var(--bg-bright, .6)) saturate(1.1);
+  opacity: 0;
+  transition: opacity 1.2s var(--ease);
+}
+.backdrop video.on { opacity: 1; }
+.backdrop .bd-vignette { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 40%, transparent 55%, color-mix(in oklab, var(--bg) 70%, transparent)); }
+
+/* ---------- shell & stage ---------- */
+.shell { position: relative; z-index: 1; height: 100dvh; display: grid; grid-template-columns: 1fr; grid-template-rows: 1fr; background: transparent; }
+.stage { position: relative; grid-column: 1; grid-row: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; isolation: isolate; }
+.topbar { display: none; }
+.view { position: absolute; inset: 0; display: none; flex-direction: column; min-height: 0; }
+.view.active { display: flex; animation: view-in var(--d-4) var(--ease-out) both; }
+@keyframes view-in { from { opacity: 0; transform: translateY(6px); } }
+.shell[data-mode="chat"] [data-modes="code"], .shell[data-mode="code"] [data-modes="chat"] { display: none !important; }
+.scrim { display: none; }
+.sb-peek { display: none; }
+
+/* ---------- frameless desktop window ---------- */
+.titlebar, .rz-edges { display: none; }
+html.framed:not(.maximized) .rz-edges { display: block; }
+.rz-edges i { position: fixed; z-index: 1001; }
+.rz-edges [data-edge="top"] { top: 0; left: 10px; right: 10px; height: 4px; cursor: ns-resize; }
+.rz-edges [data-edge="bottom"] { bottom: 0; left: 10px; right: 10px; height: 4px; cursor: ns-resize; }
+.rz-edges [data-edge="left"] { left: 0; top: 10px; bottom: 10px; width: 4px; cursor: ew-resize; }
+.rz-edges [data-edge="right"] { right: 0; top: 10px; bottom: 10px; width: 4px; cursor: ew-resize; }
+.rz-edges [data-edge="top-left"] { top: 0; left: 0; width: 10px; height: 10px; cursor: nwse-resize; }
+.rz-edges [data-edge="top-right"] { top: 0; right: 0; width: 10px; height: 10px; cursor: nesw-resize; }
+.rz-edges [data-edge="bottom-left"] { bottom: 0; left: 0; width: 10px; height: 10px; cursor: nesw-resize; }
+.rz-edges [data-edge="bottom-right"] { bottom: 0; right: 0; width: 10px; height: 10px; cursor: nwse-resize; }
+.tb-i-restore, html.maximized .tb-i-max { display: none; }
+html.maximized .tb-i-restore { display: block; }
+
+/* ==========================================================================
+   Desktop: Scorp's own taskbar floats along the bottom
+   start · Chat/Code · pages · search · chats as tabs · tray · window buttons
+   ========================================================================== */
+.taskbar { display: none; }
+@media (min-width: 901px) {
+  :root { --tkh: 64px; }
+  .shell { height: calc(100dvh - var(--tkh)); }
+  .shell > .sidebar { display: none !important; }
+
+  .taskbar {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    height: 48px;
+    z-index: 45;
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: 0 var(--s-3);
+    border-radius: var(--r-5);
+    border: 1px solid var(--glass-edge);
+    box-shadow: var(--rim), 0 24px 60px -24px var(--shade);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  /* the glass sits on a layer of its own: a backdrop-filter on the bar itself would stop the panel above it from
+     blurring the page (it could only see the bar), and the prompt box would show through it sharp */
+  .taskbar::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; background: color-mix(in oklab, var(--menu-bg) 78%, transparent); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+  .taskbar svg { width: 17px; height: 17px; }
+  /* hairline dividers between the groups */
+  .tk-mode, .tk-search, .tk-tray, .tk-win { position: relative; margin-left: var(--s-5); }
+  .tk-mode::before, .tk-search::before, .tk-tray::before, .tk-win::before { content: ""; position: absolute; left: -8px; top: 50%; height: 18px; margin-top: -9px; width: 1px; background: var(--line-2); }
+
+  /* start */
+  .tk-start { display: flex; align-items: center; gap: var(--s-4); height: 36px; padding: 0 var(--s-5) 0 var(--s-2); border-radius: var(--r-3); color: var(--ink); font: var(--w-bold) 14px var(--font-display); letter-spacing: -.03em; transition: background var(--d-2); flex: none; }
+  .tk-start .tk-mark { width: 30px; height: 30px; display: grid; place-items: center; border-radius: var(--r-2); background: var(--fill-1); box-shadow: var(--rim); overflow: hidden; }
+  .tk-start .tk-mark .mascot { --size: 30px; margin-top: 2px; }
+  .tk-start img { width: 26px; height: 26px; border-radius: var(--r-2); }
+  .tk-start:hover, .tk-start[aria-expanded="true"] { background: var(--fill-2); }
+
+  /* Chat / Code */
+  .tk-mode { display: flex; gap: 2px; padding: 2px; border-radius: var(--r-3); background: var(--fill-1); box-shadow: inset 0 0 0 1px var(--line-2); flex: none; }
+  .tk-mode a { position: relative; width: 32px; height: 28px; display: grid; place-items: center; border-radius: calc(var(--r-3) - 2px); color: var(--muted); transition: background var(--d-2), color var(--d-2); }
+  .tk-mode a:hover { color: var(--ink); }
+  .tk-mode a.on { background: var(--fill-3); color: var(--ink); box-shadow: var(--rim-strong); }
+
+  /* pages */
+  .tk-pages { display: flex; gap: 1px; flex: none; }
+  .tk-pages a { position: relative; width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--r-3); color: var(--muted); transition: background var(--d-2), color var(--d-2); }
+  .tk-pages a:hover { background: var(--fill-2); color: var(--ink); }
+  .tk-pages a.active { color: var(--ink); background: var(--fill-2); }
+  .tk-pages a.active::before { content: ""; position: absolute; bottom: 3px; left: 50%; width: 12px; height: 2px; margin-left: -6px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 6px color-mix(in oklab, var(--accent) 80%, transparent); }
+  .tk-pages .agents-count { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; line-height: 15px; font-size: 9px; padding: 0 3px; }
+  /* names float above the icons */
+  .taskbar [data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 50%;
+    translate: -50% 4px;
+    padding: 4px 9px;
+    border-radius: var(--r-2);
+    font-size: var(--t-xs);
+    font-weight: var(--w-medium);
+    white-space: nowrap;
+    color: var(--ink);
+    background: var(--menu-bg);
+    box-shadow: inset 0 0 0 1px var(--glass-edge), var(--e-1);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--d-1), translate var(--d-2) var(--ease-out);
+  }
+  .taskbar [data-tip]:hover::after { opacity: 1; translate: -50% 0; transition-delay: .3s; }
+
+  /* search */
+  .tk-search { display: flex; align-items: center; gap: var(--s-4); width: 236px; height: 34px; padding: 0 var(--s-3) 0 var(--s-5); border-radius: var(--r-3); background: var(--fill-1); box-shadow: inset 0 0 0 1px var(--line-2); color: var(--muted); cursor: text; transition: width var(--d-3) var(--ease-out), background var(--d-2), box-shadow var(--d-2); flex: none; }
+  .tk-search svg { width: 15px; height: 15px; flex: none; }
+  .tk-search input { flex: 1; min-width: 0; height: 100%; background: none; border: 0; outline: 0; color: var(--ink); font-size: var(--t-md); }
+  .tk-search input::placeholder { color: var(--faint); }
+  .tk-search input::-webkit-search-cancel-button { display: none; }
+  .tk-search:hover { background: var(--fill-2); }
+  .tk-search:focus-within, .taskbar.searching .tk-search { width: 340px; background: var(--fill-2); box-shadow: inset 0 0 0 1px var(--line), 0 0 0 3px color-mix(in oklab, var(--accent) 10%, transparent); }
+  .tk-search:focus-within kbd { display: none; }
+
+  /* chats as tabs */
+  .tk-tabs { flex: 1; min-width: 0; display: flex; align-items: center; gap: 3px; height: 100%; margin-left: var(--s-4); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 20px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 20px), transparent); }
+  .tk-tabs::-webkit-scrollbar { display: none; }
+  .tk-tab { position: relative; flex: 0 1 190px; min-width: 76px; height: 34px; display: flex; align-items: center; gap: var(--s-3); padding: 0 var(--s-2) 0 var(--s-5); border-radius: var(--r-3); color: var(--muted); font-size: var(--t-md); text-align: left; transition: background var(--d-2), color var(--d-2), opacity var(--d-2); }
+  .tk-tab:hover { background: var(--fill-1); color: var(--ink-2); }
+  .tk-tab.on { background: var(--fill-3); color: var(--ink); box-shadow: var(--rim-strong), 0 4px 14px -6px var(--shade); }
+  .tk-tab.on::before { content: ""; position: absolute; top: 0; left: 16px; right: 16px; height: 1.5px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+  .tk-tab.ghost { box-shadow: inset 0 0 0 1px var(--line-2); background: transparent; border: 0; }
+  .tk-tab.ghost.on { box-shadow: inset 0 0 0 1px var(--line); }
+  .tk-tab.ghost.on::before { display: none; }
+  .tk-tab.dragging { opacity: .35; }
+  .tk-tab .tk-tic { width: 14px; height: 14px; flex: none; opacity: .7; }
+  .tk-tl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tk-x { width: 22px; height: 22px; flex: none; display: grid; place-items: center; border-radius: var(--r-1); color: var(--faint); opacity: 0; transition: opacity var(--d-1), background var(--d-1), color var(--d-1); }
+  .tk-x svg { width: 12px; height: 12px; }
+  .tk-tab:hover .tk-x, .tk-tab.on .tk-x { opacity: 1; }
+  .tk-x:hover { background: var(--fill-3); color: var(--ink); }
+  .tk-live { width: 7px; height: 7px; margin: 0 3px; flex: none; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px color-mix(in oklab, var(--accent) 90%, transparent); animation: tk-breathe 1.6s ease-in-out infinite; }
+  @keyframes tk-breathe { 50% { opacity: .35; transform: scale(.8); } }
+  .tk-new { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: var(--r-3); color: var(--muted); transition: background var(--d-2), color var(--d-2); }
+  .tk-new:hover { background: var(--fill-2); color: var(--ink); }
+  .tk-new svg { width: 16px; height: 16px; }
+
+  /* tray */
+  .tk-tray { display: flex; align-items: center; gap: 1px; flex: none; }
+  .tk-model { display: flex; align-items: center; gap: var(--s-4); height: 30px; padding: 0 var(--s-5); max-width: 160px; border-radius: var(--r-3); font-size: var(--t-sm); color: var(--muted); white-space: nowrap; cursor: pointer; transition: background var(--d-2), color var(--d-2); }
+  .tk-model:hover { background: var(--fill-2); color: var(--ink); }
+  .tk-model #tkModelName { overflow: hidden; text-overflow: ellipsis; }
+  .tk-ic { position: relative; width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--r-3); color: var(--muted); transition: background var(--d-2), color var(--d-2); }
+  .tk-ic:hover, .tk-ic.active { background: var(--fill-2); color: var(--ink); }
+  .tk-ic svg { width: 16px; height: 16px; }
+  .tk-ic .dot { position: absolute; top: 7px; right: 7px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px color-mix(in oklab, var(--bg) 80%, transparent); }
+  .tk-clock { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; padding: 0 var(--s-4) 0 var(--s-5); line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .tk-clock b { font-size: var(--t-sm); font-weight: var(--w-semibold); color: var(--ink-2); letter-spacing: -.01em; }
+  .tk-clock span { font-size: var(--t-2xs); color: var(--faint); }
+
+  /* window buttons (desktop app only) */
+  .tk-win { display: none; align-items: center; gap: 2px; flex: none; }
+  html.framed .tk-win { display: flex; }
+  .tk-wb { width: 34px; height: 30px; display: grid; place-items: center; border-radius: var(--r-3); color: var(--muted); transition: background var(--d-1), color var(--d-1); }
+  .tk-wb svg { width: 10px !important; height: 10px !important; stroke-width: 1.2; }
+  .tk-wb:hover { background: var(--fill-2); color: var(--ink); }
+  .tk-wb.tk-close:hover { background: #E5484D; color: #fff; }
+
+  /* the panel: results, or every chat when opened from start / Ctrl+B */
+  .tk-panel {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 6px;
+    width: 470px;
+    max-height: min(64vh, 580px);
+    overflow-y: auto;
+    padding: var(--s-3);
+    border-radius: var(--r-5);
+    background: var(--menu-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-edge);
+    box-shadow: var(--rim), var(--e-3);
+    transform-origin: bottom left;
+    animation: pop-in var(--d-3) var(--ease-out);
+    overscroll-behavior: contain;
+  }
+  .tk-panel.hidden { display: none; }
+  .tk-sec { font-size: var(--t-2xs); font-weight: var(--w-semibold); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--faint); padding: var(--s-6) var(--s-5) var(--s-2); }
+  .tk-sec:first-child { padding-top: var(--s-3); }
+  .tk-item { display: flex; align-items: center; gap: var(--s-5); width: 100%; height: 36px; padding: 0 var(--s-5); border-radius: var(--r-3); text-align: left; font-size: var(--t-md); color: var(--ink-2); }
+  .tk-item svg { width: 15px; height: 15px; flex: none; color: var(--muted); }
+  .tk-item.sel { background: var(--fill-2); color: var(--ink); }
+  .tk-it { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tk-it b { font-weight: var(--w-semibold); color: var(--ink); }
+  .tk-is { flex: none; font-size: var(--t-xs); color: var(--faint); font-variant-numeric: tabular-nums; }
+  .tk-ask-ic { width: 22px; height: 22px; margin-left: -3px; display: grid; place-items: center; border-radius: var(--r-1); background: var(--accent); flex: none; }
+  .tk-ask-ic svg { color: var(--accent-ink); width: 13px; height: 13px; }
+  .tk-empty { padding: var(--s-9); text-align: center; font-size: var(--t-md); color: var(--muted); }
+
+  /* narrower windows: drop the labels first, then shrink the search */
+  @media (max-width: 1240px) {
+    .tk-start span, .tk-model #tkModelName, .tk-clock span { display: none; }
+    .tk-start { padding-right: var(--s-2); }
+    .tk-search { width: 180px; }
+  }
+}
+
+/* ==========================================================================
+   Phones: a top bar, the conversations drawer, and a tab bar at the bottom
+   ========================================================================== */
+.sidebar, .tabbar { display: none; }
+@media (max-width: 900px) {
+  .shell { grid-template-rows: 1fr auto; }
+  .stage { grid-row: 1; }
+
+  .topbar { display: flex; align-items: center; gap: var(--s-2); height: calc(48px + var(--safe-t)); padding: var(--safe-t) var(--s-3) 0; position: relative; z-index: 6; }
+  .topbar-title { flex: 1; text-align: center; font: var(--w-semibold) 16px var(--font-display); letter-spacing: -.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar .icon-btn { width: 40px; height: 40px; }
+  .shell:not([data-view="chat"]) .topbar { display: none; }
+  .view { top: calc(48px + var(--safe-t)); }
+  .shell:not([data-view="chat"]) .view { top: 0; padding-top: var(--safe-t); }
+
+  /* the drawer */
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-1);
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: min(86vw, 330px);
+    z-index: 50;
+    padding: calc(var(--s-4) + var(--safe-t)) var(--s-5) calc(var(--s-5) + var(--safe-b));
+    background: var(--sheet-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border-right: 1px solid var(--glass-edge);
+    border-radius: 0 var(--r-6) var(--r-6) 0;
+    box-shadow: var(--rim), var(--e-3);
+    transform: translateX(-104%);
+    transition: transform var(--d-4) var(--ease-out);
+  }
+  .threads-open .sidebar { transform: none; }
+  .scrim { display: block; position: fixed; inset: 0; z-index: 45; background: var(--scrim); opacity: 0; pointer-events: none; transition: opacity var(--d-3); }
+  .threads-open .scrim { opacity: 1; pointer-events: auto; }
+
+  .sb-head { display: flex; align-items: center; gap: var(--s-2); height: 44px; margin-bottom: var(--s-2); }
+  .sb-brand { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--s-4); padding: var(--s-2) var(--s-4); border-radius: var(--r-3); }
+  .sb-name { font: var(--w-bold) 20px var(--font-display); letter-spacing: -.04em; }
+  .sb-label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 3px; margin-bottom: var(--s-4); border-radius: var(--r-3); background: var(--fill-1); box-shadow: inset 0 0 0 1px var(--line-2); flex: none; }
+  .mode-switch a { display: flex; align-items: center; justify-content: center; gap: var(--s-3); height: 34px; border-radius: calc(var(--r-3) - 3px); font-size: var(--t-md); color: var(--muted); }
+  .mode-switch a svg { width: 16px; height: 16px; }
+  .mode-switch a.on { background: var(--fill-3); color: var(--ink); box-shadow: var(--rim-strong); font-weight: var(--w-medium); }
+  .sb-new { display: flex; align-items: center; gap: var(--s-5); height: 42px; padding: 0 var(--s-6); margin-bottom: var(--s-3); border-radius: var(--r-3); font-weight: var(--w-medium); color: var(--accent-ink); background: var(--accent); flex: none; }
+  .sb-new svg { width: 18px; height: 18px; }
+  .sb-new kbd { display: none; }
+  .sb-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-2); }
+  .sb-item { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: 56px; border-radius: var(--r-3); font-size: var(--t-2xs); color: var(--muted); background: var(--fill-1); }
+  .sb-item svg { width: 19px; height: 19px; }
+  .sb-item.active { color: var(--ink); background: var(--fill-3); }
+  .sb-item .agents-count { position: absolute; top: 4px; right: 6px; min-width: 15px; height: 15px; line-height: 15px; font-size: 9px; padding: 0 3px; }
+  .sb-threads { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: var(--s-6); }
+  .threads-head { display: flex; flex-direction: column; gap: var(--s-4); padding-bottom: var(--s-2); }
+  .threads-title { font-size: var(--t-2xs); font-weight: var(--w-semibold); text-transform: uppercase; letter-spacing: var(--track-caps); color: var(--faint); padding-left: var(--s-4); }
+  .shell[data-mode="chat"] .threads-title { display: none; }
+  .search-field { display: flex; align-items: center; gap: var(--s-4); height: 40px; padding: 0 var(--s-6); border-radius: var(--r-3); background: var(--fill-1); box-shadow: inset 0 0 0 1px var(--line-2); color: var(--muted); }
+  .search-field svg { width: 16px; height: 16px; }
+  .search-field input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--ink); font-size: 16px; }
+  .search-field input::-webkit-search-cancel-button { display: none; }
+  .search-field kbd { display: none; }
+  .thread-list { flex: 1; overflow-y: auto; padding: var(--s-2) 0 var(--s-7); -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent); }
+  .sb-foot { display: flex; align-items: center; gap: var(--s-2); padding-top: var(--s-4); border-top: 1px solid var(--line-2); }
+  .sb-status { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--s-4); height: 36px; padding-left: var(--s-4); font-size: var(--t-sm); color: var(--muted); }
+  .sb-icons { display: flex; flex: none; }
+  .sb-icons .icon-btn { width: 40px; height: 40px; }
+  .bell .dot { position: absolute; top: 9px; right: 9px; width: 7px; height: 7px; }
+
+  /* tab bar */
+  .tabbar {
+    display: flex;
+    grid-row: 2;
+    justify-content: space-around;
+    padding: var(--s-1) var(--s-4) calc(var(--s-1) + var(--safe-b));
+    background: color-mix(in oklab, var(--bg) 70%, transparent);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border-top: 1px solid var(--line-2);
+    z-index: 30;
+  }
+  .tabbar a, .tabbar button { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: var(--s-5) 0 var(--s-4); color: var(--muted); font-size: 10px; font-weight: var(--w-medium); border-radius: var(--r-3); transition: color var(--d-2); }
+  .tabbar svg { width: 22px; height: 22px; transition: transform var(--d-3) var(--spring); }
+  .tabbar span { line-height: 1; }
+  .tabbar .active { color: var(--ink); }
+  .tabbar .active svg { transform: translateY(-1px); }
+  .tabbar .active::after { content: ""; position: absolute; top: 0; left: 50%; width: 18px; height: 2px; margin-left: -9px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 8px color-mix(in oklab, var(--accent) 80%, transparent); }
+  .tabbar .agents-count { position: absolute; top: 5px; left: calc(50% + 6px); min-width: 15px; height: 15px; line-height: 15px; font-size: 9px; padding: 0 3px; }
+  .keyboard-open .tabbar { display: none; }
+
+  .toasts { left: var(--s-6); right: var(--s-6); top: calc(var(--s-5) + var(--safe-t)); bottom: auto; align-items: stretch; }
+  .toast { max-width: none; }
+  .sheet-backdrop { place-items: end center; padding: 0; }
+  .sheet { width: 100%; max-height: 92vh; border-radius: var(--r-7) var(--r-7) 0 0; padding-bottom: var(--safe-b); animation: sheet-up var(--d-4) var(--ease-out); }
+  .sheet-head { padding: var(--s-8) var(--s-7) var(--s-4) var(--s-8); }
+  .sheet-body { padding: var(--s-4) var(--s-8) var(--s-8); }
+  @keyframes sheet-up { from { transform: translateY(100%); } }
+  .page { padding: 0 var(--s-7) calc(var(--s-10) + var(--safe-b)); }
+  .page-head { padding: var(--s-7) 0 var(--s-8); }
+  .page-back { margin-top: var(--s-6); }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .list-row { padding: var(--s-6) var(--s-7); }
+  .list-row .lr-actions { opacity: 1; }
+  .panel-pad { padding: var(--s-7); }
+  .desk-only { display: none !important; }
+}
+
+/* ---------- the PIN gate ---------- */
+.gate { position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; padding: var(--s-9); background: transparent; }
+.gate-card { text-align: center; max-width: 380px; padding: var(--s-10) var(--s-9); border-radius: var(--r-7); background: var(--sheet-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-edge); box-shadow: var(--rim-strong), var(--e-3); animation: sheet-in .7s var(--ease-out); }
+.gate-card h1 { font-size: var(--t-4xl); margin: var(--s-6) 0 var(--s-3); letter-spacing: -.045em; }
+.gate-card p { color: var(--ink-2); margin: 0 0 var(--s-9); font-size: var(--t-md); line-height: 1.5; }
+.gate-mascot { display: grid; place-items: center; }
+.gate-mascot .mascot { --size: 104px; }
+.pin-boxes { display: flex; gap: var(--s-4); justify-content: center; }
+.pin-boxes i { width: 44px; height: 54px; border-radius: var(--r-4); background: var(--fill-1); box-shadow: inset 0 0 0 1px var(--line); display: grid; place-items: center; font: 500 22px var(--font-mono); font-style: normal; transition: all var(--d-3) var(--spring); }
+.pin-boxes i.filled { box-shadow: inset 0 0 0 1px var(--accent-line); transform: translateY(-2px); background: var(--fill-2); }
+.pin-boxes i.cur { box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-soft); }
+.gate.shake .pin-boxes { animation: shake .45s; }
+#pinInput { position: absolute; opacity: 0; pointer-events: none; }
+.gate-error { color: var(--danger); font-size: var(--t-sm); min-height: 20px; margin-top: var(--s-7) !important; }

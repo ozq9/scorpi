@@ -1,0 +1,48 @@
+/* ==========================================================================
+   Scorpi design system — the talk card beside the desktop Scorpi (companion.html, its own small window)
+   ========================================================================== */
+
+/* the window is opaque: the style's page colour with its menu fill over it, so the card follows the active style */
+html.companion, html.companion body { height: auto; min-height: 0; overflow: hidden; background: var(--bg) linear-gradient(var(--menu-bg), var(--menu-bg)); }
+html.companion body { user-select: none; -webkit-user-select: none; }
+.cc { --level: 0; display: flex; flex-direction: column; gap: var(--s-4); padding: var(--s-5) var(--s-5) var(--s-6) var(--s-7); }
+.cc.hidden, .cc .hidden { display: none !important; }
+.cc-head { display: flex; align-items: center; gap: var(--s-4); min-height: 28px; }
+.cc-dot { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; transition: background var(--d-2), transform .1s linear; }
+.cc[data-phase="listening"] .cc-dot { background: var(--danger); transform: scale(calc(1 + var(--level) * .6)); }
+.cc[data-phase="listening"] .cc-dot::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 1.5px solid color-mix(in oklab, var(--danger) 55%, transparent); animation: halo 1.4s var(--ease-out) infinite; }
+.cc[data-phase="hearing"] .cc-dot, .cc[data-phase="thinking"] .cc-dot { background: transparent; border: 1.5px solid var(--line); border-top-color: var(--ink); width: 10px; height: 10px; animation: spin .8s linear infinite; }
+.cc[data-phase="working"] .cc-dot { background: var(--accent); animation: blink 1.2s infinite; }
+.cc[data-phase="speaking"] .cc-dot, .cc[data-phase="done"] .cc-dot { background: var(--ok); }
+.cc[data-phase="asking"] .cc-dot { background: var(--warn); }
+.cc[data-phase="error"] .cc-dot { background: var(--danger); }
+.cc-status { font: var(--w-semibold) var(--t-sm) var(--font-ui); letter-spacing: var(--track-snug); color: var(--ink-2); white-space: nowrap; }
+.cc-ctx { display: inline-flex; align-items: center; gap: 5px; max-width: 160px; height: 22px; padding: 0 var(--s-4); border-radius: var(--r-4); font-size: var(--t-xs); color: var(--muted); background: var(--fill-2); overflow: hidden; }
+.cc-ctx svg { width: 12px; height: 12px; flex: none; }
+.cc-ctx span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-ic { width: 26px; height: 26px; display: grid; place-items: center; border-radius: var(--r-2); color: var(--faint); transition: background var(--d-1), color var(--d-1); }
+.cc-ic:hover { background: var(--fill-2); color: var(--ink); }
+.cc-ic svg { width: 14px; height: 14px; }
+.cc-level { display: none; align-items: center; gap: 3px; height: 26px; padding: 0 2px; }
+.cc[data-phase="listening"] .cc-level { display: flex; }
+.cc-level i { flex: 1; height: 100%; border-radius: 3px; background: color-mix(in oklab, var(--ink) 75%, transparent); transform: scaleY(.15); transition: transform .08s linear; }
+.cc-you { font-size: var(--t-sm); color: var(--muted); line-height: 1.45; max-height: 4.4em; overflow: hidden; }
+.cc-you::before { content: "You  "; color: var(--faint); font-weight: var(--w-semibold); }
+.cc-reply { font-size: var(--t-base); line-height: 1.5; color: var(--ink); letter-spacing: -.008em; max-height: 330px; overflow-y: auto; white-space: pre-wrap; user-select: text; -webkit-user-select: text; }
+.cc-actions { display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap; padding-top: var(--s-2); }
+.cc-actions .cc-q { flex: 1 1 100%; font-size: var(--t-sm); color: var(--ink-2); }
+
+/* Scorpi's menu (right-click) */
+.cm { display: flex; flex-direction: column; padding: var(--s-3); }
+.cm.hidden { display: none; }
+.cm-title { padding: var(--s-3) var(--s-5) var(--s-2); font: var(--w-semibold) var(--t-2xs) var(--font-ui); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--faint); }
+.cm-item { display: flex; align-items: center; gap: var(--s-5); width: 100%; min-height: 36px; padding: var(--s-3) var(--s-5); border-radius: var(--r-3); text-align: left; font-size: var(--t-md); color: var(--ink-2); transition: background var(--d-1), color var(--d-1); }
+.cm-item:hover { background: var(--fill-2); color: var(--ink); }
+.cm-item svg { width: 16px; height: 16px; color: var(--muted); }
+.cm-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.cm-text small { font-size: var(--t-xs); color: var(--faint); }
+.cm-switch { position: relative; width: 30px; height: 18px; border-radius: var(--r-4); box-shadow: inset 0 0 0 1px var(--faint); flex: none; transition: background var(--d-1); }
+.cm-switch::after { content: ""; position: absolute; left: 3px; top: 3px; width: 12px; height: 12px; border-radius: var(--r-2); background: var(--muted); transition: transform var(--d-2) steps(2, end), background var(--d-1); }
+.cm-switch.on { background: var(--accent); }
+.cm-switch.on::after { transform: translateX(12px); background: var(--accent-ink); }
+.cm-sep { height: 1px; margin: var(--s-2) 0; background: var(--line); }

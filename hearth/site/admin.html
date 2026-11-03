@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Feedback inbox, Scorpi</title>
+<link rel="icon" href="/img/icon-192.png" type="image/png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="/style.css">
+<style>
+  /* the owner's inbox: everything sent through the site's feedback form */
+  .inbox { padding-top: 40px; padding-bottom: 64px; }
+  .inbox h1 { font-size: 24px; margin-bottom: 6px; }
+  .key { display: flex; flex-wrap: wrap; gap: 10px; max-width: 560px; margin-top: 24px; }
+  .key input { flex: 1; min-width: 220px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 6px; background: var(--cell); color: var(--fg); font: inherit; font-size: 14px; }
+  .key input:focus { outline: none; border-color: var(--dim); }
+  .top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px 24px; margin: 28px 0 8px; }
+  .top .tabs { flex-wrap: wrap; }
+  .links { display: flex; gap: 18px; font-size: 13px; }
+  .links button { color: var(--dim); text-decoration: underline; text-underline-offset: 3px; }
+  .links button:hover { color: var(--fg); }
+  .item { padding: 18px 0; border-top: 1px solid var(--rule); }
+  .item:last-child { border-bottom: 1px solid var(--rule); }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--dim); }
+  .meta .kind { color: var(--fg); }
+  .msg { margin: 8px 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 80ch; }
+  .item .del { font-size: 12px; color: var(--faint); text-decoration: underline; text-underline-offset: 3px; }
+  .item .del:hover { color: #ff9b9b; }
+  .empty { padding: 32px 0; color: var(--dim); border-top: 1px solid var(--rule); }
+  .gal-admin-title { margin: 56px 0 6px; font-size: 20px; }
+  .item .acts { display: flex; gap: 16px; }
+  .item .acts a, .item .acts button { font-size: 12px; color: var(--dim); text-decoration: underline; text-underline-offset: 3px; }
+  .item .acts a:hover, .item .acts button:hover { color: var(--fg); }
+  .item.hidden-item { opacity: .65; }
+  .reports { margin: 6px 0 10px; padding-left: 18px; font-size: 13px; color: #d6b36f; }
+</style>
+</head>
+<body>
+<div class="col">
+  <header class="bar"><a class="mark" href="/">scorpi<span class="cursor" aria-hidden="true"></span><span class="tag">beta</span></a></header>
+  <main class="inbox pad">
+    <h1>Feedback inbox</h1>
+    <p class="fine">Everything people send through the form on the site, newest first.</p>
+
+    <form class="key" data-login>
+      <input name="key" type="password" autocomplete="current-password" placeholder="Admin key" aria-label="Admin key" required>
+      <button class="btn" type="submit">Open inbox</button>
+      <p class="fine" data-login-status role="status" style="flex-basis: 100%"></p>
+    </form>
+
+    <section data-inbox hidden>
+      <div class="top">
+        <div class="tabs" role="tablist" aria-label="Filter by kind" data-filter>
+          <button role="tab" aria-selected="true" data-kind="">all <span data-count=""></span></button>
+          <button role="tab" aria-selected="false" data-kind="bug">bug <span data-count="bug"></span></button>
+          <button role="tab" aria-selected="false" data-kind="idea">idea <span data-count="idea"></span></button>
+          <button role="tab" aria-selected="false" data-kind="other">other <span data-count="other"></span></button>
+        </div>
+        <div class="links">
+          <button type="button" data-refresh>refresh</button>
+          <button type="button" data-logout>forget key on this device</button>
+        </div>
+      </div>
+      <div data-list></div>
+
+      <h2 class="gal-admin-title">Gallery</h2>
+      <p class="fine">What people shared. Items with three reports hide themselves until you look: show them again or delete them.</p>
+      <div data-gallery></div>
+    </section>
+  </main>
+</div>
+<script>
+// The key stays in this browser only (localStorage) and is sent as a Bearer header to /api/feedback.
+const KEY = 'scorpi.feedbackKey';
+const login = document.querySelector('[data-login]');
+const loginStatus = document.querySelector('[data-login-status]');
+const inbox = document.querySelector('[data-inbox]');
+const list = document.querySelector('[data-list]');
+let items = [];
+let kind = '';
+
+const getKey = () => { try { return localStorage.getItem(KEY) || ''; } catch { return ''; } };
+const setKey = (k) => { try { k ? localStorage.setItem(KEY, k) : localStorage.removeItem(KEY); } catch {} };
+const api = (path, opts = {}) => fetch('/api/feedback' + path, { ...opts, headers: { Authorization: 'Bearer ' + getKey() } });
+
+function when(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? iso : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function render() {
+  for (const el of document.querySelectorAll('[data-count]')) {
+    const k = el.dataset.count;
+    el.textContent = '(' + items.filter((f) => !k || f.kind === k).length + ')';
+  }
+  const shown = items.filter((f) => !kind || f.kind === kind);
+  list.replaceChildren();
+  if (!shown.length) {
+    const p = document.createElement('p');
+    p.className = 'empty';
+    p.textContent = items.length ? 'Nothing of this kind yet.' : 'No feedback yet. It shows up here as soon as someone sends the form.';
+    list.append(p);
+    return;
+  }
+  for (const f of shown) {
+    const item = document.createElement('article');
+    item.className = 'item';
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const parts = [['kind', f.kind], ['', when(f.created)], ['', f.contact], ['', f.version && 'v' + f.version], ['', f.os], ['', f.country], ['', '#' + f.id]];
+    for (const [cls, text] of parts) {
+      if (!text) continue;
+      const s = document.createElement('span');
+      if (cls) s.className = cls;
+      s.textContent = text;
+      meta.append(s);
+    }
+    const msg = document.createElement('p');
+    msg.className = 'msg';
+    msg.textContent = f.message;
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.type = 'button';
+    del.textContent = 'delete';
+    del.addEventListener('click', async () => {
+      if (!confirm('Delete this feedback for good?')) return;
+      const res = await api('?id=' + f.id, { method: 'DELETE' });
+      if (res.ok) { items = items.filter((x) => x.id !== f.id); render(); } else alert('Not deleted: the server answered ' + res.status + '.');
+    });
+    item.append(meta, msg, del);
+    list.append(item);
+  }
+}
+
+// ---------- gallery moderation (/api/gallery with the same key) ----------
+const galleryList = document.querySelector('[data-gallery]');
+const galleryApi = (query, opts = {}) => fetch('/api/gallery?' + query, { ...opts, headers: { Authorization: 'Bearer ' + getKey(), 'Content-Type': 'application/json' } });
+
+async function loadGallery() {
+  const res = await galleryApi('all=1');
+  const out = await res.json().catch(() => ({}));
+  galleryList.replaceChildren();
+  if (!res.ok) {
+    galleryList.append(Object.assign(document.createElement('p'), { className: 'empty', textContent: out.error || 'The gallery did not answer (' + res.status + ').' }));
+    return;
+  }
+  const reasons = {};
+  for (const r of out.reports || []) (reasons[r.item] = reasons[r.item] || []).push(r.reason || '(no reason given)');
+  if (!out.items.length) {
+    galleryList.append(Object.assign(document.createElement('p'), { className: 'empty', textContent: 'Nothing shared yet.' }));
+    return;
+  }
+  // reported and hidden items first: they are the ones waiting for you
+  out.items.sort((a, b) => (b.hidden - a.hidden) || (b.reports - a.reports));
+  for (const g of out.items) {
+    const item = document.createElement('article');
+    item.className = 'item' + (g.hidden ? ' hidden-item' : '');
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    for (const [cls, text] of [['kind', g.kind], ['', when(g.created)], ['', g.author ? 'by ' + g.author : 'anonymous'], ['', g.installs + ' installs'],
+      ['', g.reports ? g.reports + ' reports' : ''], ['kind', g.hidden ? 'hidden' : ''], ['', g.version && 'v' + g.version], ['', g.id]]) {
+      if (!text) continue;
+      const s = document.createElement('span');
+      if (cls) s.className = cls;
+      s.textContent = text;
+      meta.append(s);
+    }
+    const msg = document.createElement('p');
+    msg.className = 'msg';
+    msg.textContent = g.name + (g.description ? ' — ' + g.description : '');
+    item.append(meta, msg);
+    if (reasons[g.id]) {
+      const ul = document.createElement('ul');
+      ul.className = 'reports';
+      for (const r of reasons[g.id]) ul.append(Object.assign(document.createElement('li'), { textContent: r }));
+      item.append(ul);
+    }
+    const acts = document.createElement('div');
+    acts.className = 'acts';
+    const view = Object.assign(document.createElement('a'), { href: '/api/gallery?id=' + g.id, target: '_blank', rel: 'noopener', textContent: 'contents' });
+    const toggle = Object.assign(document.createElement('button'), { type: 'button', textContent: g.hidden ? 'show again' : 'hide' });
+    toggle.addEventListener('click', async () => {
+      const r = await galleryApi('id=' + g.id, { method: 'PATCH', body: JSON.stringify({ hidden: g.hidden ? 0 : 1 }) });
+      if (r.ok) loadGallery(); else alert('Not changed: the server answered ' + r.status + '.');
+    });
+    const del = Object.assign(document.createElement('button'), { type: 'button', textContent: 'delete' });
+    del.addEventListener('click', async () => {
+      if (!confirm('Delete “' + g.name + '” from the gallery for good?')) return;
+      const r = await galleryApi('id=' + g.id, { method: 'DELETE' });
+      if (r.ok) loadGallery(); else alert('Not deleted: the server answered ' + r.status + '.');
+    });
+    acts.append(view, toggle, del);
+    item.append(acts);
+    galleryList.append(item);
+  }
+}
+
+async function load() {
+  loginStatus.textContent = 'Loading...';
+  try {
+    const res = await api('');
+    const out = await res.json().catch(() => ({}));
+    if (res.status === 401) { setKey(''); throw new Error('That key is wrong. Check it and try again.'); }
+    if (!res.ok) throw new Error(out.error || 'The server answered ' + res.status + '.');
+    items = out.feedback || [];
+    login.hidden = true;
+    inbox.hidden = false;
+    loginStatus.textContent = '';
+    render();
+    loadGallery();
+  } catch (err) {
+    login.hidden = false;
+    inbox.hidden = true;
+    loginStatus.textContent = err instanceof TypeError ? "Couldn't reach the server." : err.message;
+  }
+}
+
+login.addEventListener('submit', (e) => {
+  e.preventDefault();
+  setKey(login.key.value.trim());
+  login.key.value = '';
+  load();
+});
+document.querySelector('[data-refresh]').addEventListener('click', load);
+document.querySelector('[data-logout]').addEventListener('click', () => { setKey(''); items = []; inbox.hidden = true; login.hidden = false; });
+document.querySelectorAll('[data-filter] button').forEach((b) => b.addEventListener('click', () => {
+  kind = b.dataset.kind;
+  document.querySelectorAll('[data-filter] button').forEach((x) => x.setAttribute('aria-selected', x === b));
+  render();
+}));
+if (getKey()) load();
+</script>
+</body>
+</html>

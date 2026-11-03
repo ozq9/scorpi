@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scorpi · a small AI that lives on your PC</title>
+<meta name="description" content="Scorpi is a free AI for Windows that lives on your own computer: it chats, plans, codes, talks, and walks along your taskbar. One installer, nothing else to set up.">
+<meta name="theme-color" content="#f3efe8">
+<meta property="og:title" content="Scorpi · a small AI that lives on your PC">
+<meta property="og:description" content="Free for Windows. It chats, plans, codes, talks, and walks along your taskbar.">
+<meta property="og:image" content="/img/og.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/img/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="bar">
+  <a class="mark" href="#top" aria-label="Scorpi, back to the top"><img src="/img/icon-192.png" alt="" width="30" height="30">scorpi</a>
+  <nav aria-label="Sections">
+    <a href="#tour">Tour</a>
+    <a href="#desktop">Desktop</a>
+    <a href="#install">Install</a>
+    <a href="#faq">FAQ</a>
+  </nav>
+  <a class="pill pill-sm" href="downloads/Scorpi-Setup.exe" data-download>Download</a>
+</header>
+
+<main id="top">
+
+  <!-- 1. hero -->
+  <section class="hero">
+    <p class="kicker"><span class="blink"></span>Free · Windows 10 &amp; 11 · version <span data-version>1.0</span></p>
+    <h1 class="split">
+      <span>A small</span> <span><em>scorpion</em></span><br>
+      <span>that lives</span><br>
+      <span>on your</span> <span>PC.</span>
+    </h1>
+    <p class="lede">Scorpi chats, plans, codes and talks back. It runs on your computer with free models, and it walks along your taskbar while it waits.</p>
+    <div class="cta">
+      <a class="pill" href="downloads/Scorpi-Setup.exe" data-download>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14"/></svg>
+        Download for Windows
+      </a>
+      <span class="fine" data-meta>Scorpi-Setup.exe · 2.4 MB · installs everything</span>
+    </div>
+    <img class="hero-scorpi" src="/img/scorpi-idle.png" alt="Scorpi, a round porcelain-white scorpion, sitting on a cloud" width="280" height="307">
+  </section>
+
+  <!-- the real app, with Scorpi walking along its top edge -->
+  <section class="stage" aria-label="Scorpi's app window">
+    <div class="walkway" aria-hidden="true"><div class="walker"><div class="sprite"></div></div></div>
+    <figure class="win">
+      <div class="win-top"><i></i><i></i><i></i><span>Scorpi</span></div>
+      <img src="/img/shots/canvas.webp" alt="Scorpi's real app: a chat answer about a rainy Lisbon weekend next to a live canvas with forecast and rain charts and plan cards" width="2000" height="1250" fetchpriority="high">
+    </figure>
+    <p class="caption">A real screenshot. Asked: <q>Plan a relaxed weekend in Lisbon for two.</q> Scorpi checked the forecast and built the plan around the rain.</p>
+  </section>
+
+  <!-- things you can say -->
+  <section class="say" aria-label="Things you can ask">
+    <div class="say-track">
+      <span>“plan a weekend in Lisbon”</span><span>“build my bakery a website”</span><span>“remind me at 13:00 to stretch”</span>
+      <span>“what's on my screen?”</span><span>“play some jazz”</span><span>“summarise this PDF”</span><span>“make it look like warm paper”</span>
+    </div>
+  </section>
+
+  <!-- 2. tour: sticky screenshot, chapters scroll past -->
+  <section class="tour" id="tour">
+    <div class="tour-text">
+      <p class="label">The tour</p>
+      <article class="chapter" data-shot="0">
+        <span class="num">01</span>
+        <h2>Answers you can <em>look at</em>.</h2>
+        <p>Ask something and Scorpi does the work: it searches, checks the weather, reads your files, then lays the answer out on a live canvas with charts, maps and cards. The short version is said out loud.</p>
+      </article>
+      <article class="chapter" data-shot="1">
+        <span class="num">02</span>
+        <h2>A team that works <em>while you talk</em>.</h2>
+        <p>Bigger jobs go to agents. The Coder builds websites and apps in its own folder, the Researcher writes cited reports, and you can make your own: <q>remind me every day at 13:00 to take a break.</q></p>
+      </article>
+      <article class="chapter" data-shot="2">
+        <span class="num">03</span>
+        <h2>Or just <em>talk</em>.</h2>
+        <p>Switch to Voice and have a conversation. Scorpi answers in a natural voice, and you can interrupt it any time. It stops and listens.</p>
+      </article>
+      <article class="chapter" data-shot="3">
+        <span class="num">04</span>
+        <h2>Make it <em>yours</em>.</h2>
+        <p>The Studio changes every colour, font and corner with a live preview. Or describe a look, <q>warm paper with serif headings</q>, and Scorpi makes it. Plugins add panes, commands and buttons.</p>
+      </article>
+      <article class="chapter" data-shot="4">
+        <span class="num">05</span>
+        <h2>In your <em>pocket</em>, too.</h2>
+        <p>Open Scorpi on your phone over Wi-Fi or Tailscale and add it to your home screen. Your PC does the thinking; a pairing PIN keeps everyone else out.</p>
+      </article>
+    </div>
+    <div class="tour-shots" aria-hidden="true">
+      <div class="shots">
+        <img class="shot on" src="/img/shots/canvas.webp" alt="" width="2000" height="1250" loading="lazy">
+        <img class="shot" src="/img/shots/agents.webp" alt="" width="1600" height="1000" loading="lazy">
+        <img class="shot" src="/img/shots/voice.webp" alt="" width="1600" height="1000" loading="lazy">
+        <img class="shot" src="/img/shots/studio.webp" alt="" width="1600" height="1000" loading="lazy">
+        <img class="shot phone" src="/img/shots/phone.webp" alt="" width="780" height="1688" loading="lazy">
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. on the desktop -->
+  <section class="desk" id="desktop">
+    <div class="desk-copy">
+      <p class="label">On your desktop</p>
+      <h2>It doesn't stay<br>in its <em>window</em>.</h2>
+      <p>Scorpi can live freely on Windows: it walks along the taskbar and the tops of windows, rides along when you move one, and takes a nap when you're away.</p>
+      <p class="keys">Hold <kbd data-key>Ctrl</kbd> + <kbd data-key>Win</kbd> in any program and ask <q>what's this?</q> Scorpi sees the window you mean and answers right there.</p>
+    </div>
+    <div class="taskbar" aria-hidden="true">
+      <div class="dwin"><b><i></i><i></i><i></i></b><span></span><span></span><span class="short"></span></div>
+      <div class="bubble">What's this error?</div>
+      <div class="walker roam"><div class="sprite"></div></div>
+      <div class="tb">
+        <span class="tb-start"></span><span></span><span></span><span class="tb-app"><img src="/img/icon-192.png" alt=""></span><span></span>
+        <span class="tb-clock">17:48</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. free -->
+  <section class="free">
+    <p class="label">Models</p>
+    <h2>Free. <em>Actually.</em></h2>
+    <p class="free-lede">Run models offline with Ollama, or paste a free key from a cloud provider. No GPU needed. When a free model runs out, Scorpi moves to the next one and tells you.</p>
+    <p class="providers">
+      Ollama <i>/</i> Groq <i>/</i> Google Gemini <i>/</i> OpenRouter <i>/</i> GitHub Models <i>/</i> Mistral <i>/</i> Cerebras <i>/</i> NVIDIA <i>/</i>
+      Hugging Face <i>/</i> Cohere <i>/</i> SambaNova <i>/</i> Pollinations <i>/</i> and your own keys or coding plans
+    </p>
+  </section>
+
+  <!-- 5. install -->
+  <section class="install" id="install">
+    <div class="install-copy">
+      <p class="label">Install</p>
+      <h2>One file.<br><em>That's the setup.</em></h2>
+      <ol class="steps">
+        <li><b>Download Scorpi-Setup.exe</b><span>2.4 MB. It fetches the rest itself, about 300 MB.</span></li>
+        <li><b>Click Install</b><span>No admin, no Python to set up, nothing else to download. A few minutes.</span></li>
+        <li><b>Say hi</b><span>Pick a model in <i>Connect → Model</i>. A free Groq or Gemini key is the quickest start.</span></li>
+      </ol>
+      <a class="pill" href="downloads/Scorpi-Setup.exe" data-download>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14"/></svg>
+        Download Scorpi
+      </a>
+      <p class="fine warn">Scorpi isn't code-signed yet, so Windows may say <i>“Windows protected your PC.”</i> Choose <b>More info → Run anyway</b>.</p>
+    </div>
+    <div class="setup" aria-label="The real installer">
+      <img class="setup-shot on" src="/img/shots/setup-welcome.webp" alt="Scorpi Setup: Scorpi on a cloud, the install folder, two switches and an Install button" width="460" height="600" loading="lazy">
+      <img class="setup-shot" src="/img/shots/setup-progress.webp" alt="" width="460" height="600" loading="lazy">
+      <img class="setup-shot" src="/img/shots/setup-done.webp" alt="" width="460" height="600" loading="lazy">
+    </div>
+  </section>
+
+  <!-- 6. faq -->
+  <section class="faq" id="faq">
+    <p class="label">Questions</p>
+    <h2>Good to <em>know</em>.</h2>
+    <div class="qa">
+      <details><summary>Is Scorpi really free?</summary>
+        <p>Yes. Scorpi is free, and so can everything it uses be: local models through Ollama, free cloud tiers, free neural voices, OpenStreetMap, Open-Meteo weather and DuckDuckGo search. Paid keys are optional.</p></details>
+      <details><summary>Where do my chats and keys go?</summary>
+        <p>They stay on your PC, in Scorpi's own data folder. Messages only go to the model provider you picked, or nowhere at all with a local model.</p></details>
+      <details><summary>Do I need a powerful PC?</summary>
+        <p>No. With a free cloud model any Windows 10 or 11 PC works. A strong GPU only matters if you want to run models offline.</p></details>
+      <details><summary>Can it break things on my computer?</summary>
+        <p>Reading is allowed by default. Running code, controlling the PC, deleting and sending things ask you first, and you can set every tool to Allow, Ask or Off.</p></details>
+      <details><summary>How do I remove it?</summary>
+        <p>Like any app: Settings → Apps → Scorpi → Uninstall. You choose whether your chats and settings stay for later.</p></details>
+      <details><summary>Why does Windows warn me about the download?</summary>
+        <p>Windows shows that for programs without a paid code-signing certificate. You can check the download against the SHA-256 at the bottom of this page.</p></details>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <div class="word-wrap">
+    <div class="sleep"><img src="/img/scorpi-sleeping.png" alt="Scorpi asleep on its cloud" width="289" height="302" loading="lazy"><span class="z">z</span><span class="z">z</span><span class="z">z</span></div>
+    <p class="word" aria-hidden="true">scorpi</p>
+  </div>
+  <div class="foot-row">
+    <span>Made for Windows. Runs on your own PC.</span>
+    <span class="hash" data-hash title="SHA-256 of Scorpi-Setup.exe"></span>
+  </div>
+</footer>
+
+<script src="/main.js" defer></script>
+</body>
+</html>
