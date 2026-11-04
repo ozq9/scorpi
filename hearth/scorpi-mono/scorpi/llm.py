@@ -197,6 +197,26 @@ def _endpoint(model, protocol=None, messages=None):
     return None
 
 
+def _entry_context(entry):
+    """The model's context window in tokens, when its listing says (OpenRouter, Groq, Mistral, Together...)."""
+    if not isinstance(entry, dict):
+        return 0
+    for key in ("context_length", "context_window", "max_context_length", "max_model_len", "contextWindow", "max_input_tokens"):
+        value = entry.get(key) or ((entry.get("top_provider") or {}).get(key) if isinstance(entry.get("top_provider"), dict) else None)
+        try:
+            if value and int(value) >= 1024:
+                return int(value)
+        except (TypeError, ValueError):
+            continue
+    for prop in entry.get("properties") or []:  # Cloudflare
+        if isinstance(prop, dict) and prop.get("property_id") == "context_window":
+            try:
+                return int(prop.get("value"))
+            except (TypeError, ValueError):
+                pass
+    return 0
+
+
 def _entry_caps(entry, mid):
     tools = vision = None
     caps = set()
@@ -296,7 +316,11 @@ def _fetch_cloud(pid):
                 if not free:
                     continue
         seen.add(mid)
-        out.append({"id": mid, "caps": sorted(_entry_caps(entry, mid))})
+        item = {"id": mid, "caps": sorted(_entry_caps(entry, mid))}
+        window = _entry_context(entry)
+        if window:
+            item["ctx"] = window
+        out.append(item)
     return out
 
 
@@ -436,6 +460,59 @@ def vision_model(need_tools=False):
     except Exception:
         pass
     return pick_model(need)
+
+
+_learned_window = {}  # model ref -> tokens a request may hold, learned from "request too large" answers
+
+
+def context_budget(model):
+    """How many tokens of conversation to send to a model: most of its context window, a limit learned from the
+    provider, or a safe default (free tiers often cap tokens per request or per minute well below the window)."""
+    learned = _learned_window.get(model)
+    if not is_cloud(model or ""):
+        window = int(SETTINGS["num_ctx"] or 16384) if SETTINGS["provider"] == "ollama" else 32768
+        return min(learned or window, int(window * 0.8))
+    window = 0
+    pid, mid = split_cloud(model)
+    if pid in P.BY_ID:
+        for m in (_cloud_cache.get(pid) or {}).get("models") or []:
+            if m["id"] == mid:
+                window = m.get("ctx") or 0
+                break
+    budget = int(window * 0.7) if window else 48000
+    return max(2000, min(budget, learned or budget, 120000))
+
+
+def learn_limit(model, exc):
+    """Remember a smaller budget after a provider refused a request as too large. True when there is a smaller one."""
+    if not is_context_error(exc):
+        return False
+    text = str(exc)
+    limit = 0
+    for pattern in (r"limit\s*[:=]?\s*(\d{3,7})", r"maximum context length is (\d{3,7})", r"context (?:length|window) (?:of|is) (\d{3,7})",
+                    r"max(?:imum)?[_ ]tokens?[^\d]{0,20}(\d{3,7})"):
+        m = re.search(pattern, text, re.I)
+        if m:
+            limit = int(m.group(1))
+            break
+    current = context_budget(model)
+    new = int(limit * 0.75) if limit else int(current * 0.5)
+    new = max(1500, min(new, int(current * 0.75)))
+    _learned_window[model] = new
+    return True
+
+
+def is_context_error(exc):
+    """A request refused because it holds too many tokens (context window or tokens-per-minute limit)."""
+    text = str(exc).lower()
+    status = getattr(exc, "status", 0)
+    if status == 413 or "request too large" in text:
+        return True
+    if status == 429:
+        return False  # a rate limit: waiting or another model helps, a smaller request does not
+    return any(k in text for k in ("context length", "context_length", "context window", "maximum context", "too many tokens",
+                                   "prompt is too long", "input is too long", "reduce the length", "string too long",
+                                   "exceeds the model's", "exceeds the context"))
 
 
 def describe_images(images, prompt, model=None):
@@ -633,11 +710,13 @@ def delete_model(name):
 
 # ---------- chat ----------
 
-def chat_stream(model, messages, tools=None, options=None, cancelled=lambda: False):
+def chat_stream(model, messages, tools=None, options=None, cancelled=lambda: False, compactable=False):
     """Yield events: {'type': 'thinking'|'token', 'content'} and finally
     {'type': 'end', 'content', 'thinking', 'tool_calls': [{'id','name','arguments'}]}.
     When a model is rate-limited or unreachable before it answers, another available model takes over and
-    {'type': 'switch', 'model', 'text'} is yielded first."""
+    {'type': 'switch', 'model', 'text'} is yielded first.
+    compactable: the caller can shorten the conversation, so a "too many tokens" refusal is raised to it (after
+    learning the limit) instead of moving to another model."""
     options = options or {}
     need = {"tools"} if tools else set()
     if any(m.get("images") for m in messages):
@@ -672,6 +751,10 @@ def chat_stream(model, messages, tools=None, options=None, cancelled=lambda: Fal
                 yield event
             return
         except LLMError as exc:
+            if not started and is_context_error(exc):
+                learn_limit(model, exc)
+                if compactable:
+                    raise
             if is_cloud(model) and exc.status in (404, 410, 408):
                 _slow_models[model] = time.time() + SLOW_COOLDOWN
             # a 404/410 usually means "this model is not enabled for this account" (NVIDIA lists models the key

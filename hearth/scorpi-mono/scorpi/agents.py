@@ -653,20 +653,81 @@ def project_path(folder):
     return links().get(folder) or os.path.join(PROJECTS, folder)
 
 
-RULE_FILES = ("AGENTS.md", "CLAUDE.md", ".github/copilot-instructions.md")
+# Instructions repositories keep for coding agents, in the conventions of every popular agent (all are read)
+RULE_FILES = ("AGENTS.md", "CLAUDE.md", "GEMINI.md", "CONVENTIONS.md", ".cursorrules", ".windsurfrules", ".clinerules",
+              ".github/copilot-instructions.md", "CLAUDE.local.md")
+RULE_DIRS = (".cursor/rules", ".clinerules", ".windsurf/rules", ".roo/rules", ".kilocode/rules", ".github/instructions", ".scorpi/rules")
+RULES_LIMIT = 16000
+
+
+def _rule_file(path):
+    """(text, when) of one rules file; when is "" or the files it applies to (Cursor's globs front matter)."""
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        text = fh.read(RULES_LIMIT).strip()
+    when = ""
+    m = re.match(r"^---\s*\n(.*?)\n---\s*\n?", text, re.S)
+    if m:
+        meta, text = m.group(1), text[m.end():].strip()
+        globs = re.search(r"^(?:globs|applyTo)\s*:\s*(.+)$", meta, re.M)
+        always = re.search(r"^alwaysApply\s*:\s*true", meta, re.M | re.I)
+        if globs and globs.group(1).strip() not in ("", '""', "''", "**", '"**"') and not always:
+            when = globs.group(1).strip().strip('"\'')
+    return text, when
 
 
 def project_rules(workdir):
-    """(file name, text) of the instructions a repository keeps for coding agents, or None."""
-    for name in RULE_FILES if workdir else ():
-        path = os.path.join(workdir, name)
+    """(file names, text) of the instructions a repository keeps for coding agents (AGENTS.md, CLAUDE.md, Cursor,
+    Cline, Windsurf, Copilot... rules), or None. Identical files are read once; rules for some files only are marked
+    as such; AGENTS.md files in subfolders are listed so the agent reads them before working there."""
+    if not workdir or not os.path.isdir(workdir):
+        return None
+    found, seen, size = [], set(), 0
+
+    def add(rel, path):
+        nonlocal size
+        try:
+            text, when = _rule_file(path)
+        except OSError:
+            return
+        key = " ".join(text.split())
+        if not text or key in seen or size >= RULES_LIMIT:
+            return
+        seen.add(key)
+        text = text[:RULES_LIMIT - size]
+        size += len(text)
+        found.append((rel, text, when))
+
+    for name in RULE_FILES:
+        path = os.path.join(workdir, *name.split("/"))
         if os.path.isfile(path):
-            try:
-                with open(path, encoding="utf-8", errors="replace") as fh:
-                    return name, fh.read(12000).strip()
-            except OSError:
-                return None
-    return None
+            add(name, path)
+    for folder in RULE_DIRS:
+        base = os.path.join(workdir, *folder.split("/"))
+        if os.path.isdir(base):
+            for name in sorted(os.listdir(base)):
+                if name.lower().endswith((".md", ".mdc", ".txt")) and os.path.isfile(os.path.join(base, name)):
+                    add(folder + "/" + name, os.path.join(base, name))
+    nested = []
+    for root, dirs, files in os.walk(workdir):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")]
+        if root.count(os.sep) - workdir.count(os.sep) > 4:
+            dirs[:] = []
+        if root != workdir:
+            for name in ("AGENTS.md", "CLAUDE.md"):
+                if name in files:
+                    nested.append(os.path.relpath(os.path.join(root, name), workdir).replace("\\", "/"))
+        if len(nested) >= 30:
+            break
+    if not found and not nested:
+        return None
+    parts = []
+    for rel, text, when in found:
+        parts.append("From %s%s:\n%s" % (rel, (" (applies to files matching %s)" % when) if when else "", text))
+    if nested:
+        parts.append("Subfolders have their own instructions; read the one that covers a folder before changing files there: "
+                     + ", ".join(nested))
+    names = ", ".join(rel for rel, _, _ in found) or "subfolder instructions"
+    return names, "\n\n".join(parts)
 
 
 def links():

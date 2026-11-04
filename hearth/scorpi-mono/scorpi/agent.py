@@ -12,6 +12,7 @@ import time
 import traceback
 
 from . import db, events, llm, usage
+from .compact import Compactor
 from .config import SETTINGS, UPLOADS, WORKSPACE
 from .tools import TOOLS, Result, ToolError, base_dir, policy, schema_for, select_tools
 
@@ -272,6 +273,8 @@ class Agent:
             self.emit({"type": "notice", "text": "%s may not support images. Pick a vision model (e.g. a free Gemini key, or qwen2.5vl locally) in Connections → Model." % model})
 
         messages = [{"role": "system", "content": self.system_prompt()}] + history
+        task_index = len(messages) - 1  # the message that started this turn: always kept whole
+        compactor = Compactor(self._summarize)
         options = {"temperature": float(SETTINGS["temperature"]), "num_ctx": int(SETTINGS["num_ctx"])}
         texts = []
         seen_calls = {}
@@ -298,7 +301,18 @@ class Agent:
             if step == max_steps:
                 messages.append({"role": "user", "content": "(Step limit reached. Summarize what you have done and what remains, without calling tools.)"})
             self._trim_images(messages)
-            text, thinking, calls = self._stream(model, messages, tools, options)
+            for attempt in range(3):
+                # keep the request inside what the model accepts; after a "too large" refusal, shorten harder and retry
+                note, task_index = compactor.fit(messages, llm.context_budget(model), task_index, tools, force=attempt > 0,
+                                                 keep_recent=8 if attempt < 2 else 3)
+                if note:
+                    self.emit({"type": "notice", "text": note})
+                try:
+                    text, thinking, calls = self._stream(model, messages, tools, options)
+                    break
+                except llm.LLMError as exc:
+                    if attempt == 2 or not llm.is_context_error(exc) or self.cancelled():
+                        raise
             if self.switched and self.switched != model:
                 model = self.switched  # keep using the model that took over after a rate limit
                 caps = llm.capabilities(model)
@@ -369,7 +383,7 @@ class Agent:
         sid = ("%s-%s%s" % (conv, self.depth, ("-" + self.label) if self.label else "") if self.depth else conv) if conv else ""
         with llm.session(sid), usage.tag(self.run.origin if self.run else "other", conv):
             try:
-                return self._consume(llm.chat_stream(model, clean, tools, options, self.cancelled))
+                return self._consume(llm.chat_stream(model, clean, tools, options, self.cancelled, compactable=True))
             except llm.LLMError as exc:
                 msg = str(exc).lower()
                 if tools and ("does not support tools" in msg or "tool" in msg and "support" in msg):
@@ -377,6 +391,16 @@ class Agent:
                     self.emit({"type": "notice", "text": "%s can't use tools, so answering without them. Pick a tool-capable model (qwen3, llama3.1, mistral-nemo...) for full abilities." % model})
                     return self._consume(llm.chat_stream(model, clean, None, options, self.cancelled))
                 raise
+
+    def _summarize(self, prompt):
+        """A summary of earlier steps for context compaction, written by the model this turn works with."""
+        conv = self.run.conv_id if self.run else ""
+        with llm.session(conv), usage.tag(self.run.origin if self.run else "other", conv):
+            for event in llm.chat_stream(self.switched or self.model, [{"role": "user", "content": prompt}],
+                                         options={"temperature": 0.2, "num_ctx": int(SETTINGS["num_ctx"])}, cancelled=self.cancelled):
+                if event["type"] == "end":
+                    return event["content"]
+        return ""
 
     def _consume(self, stream):
         text, thinking, calls = "", "", []
