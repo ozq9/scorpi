@@ -5,7 +5,8 @@
 import { api, fileUrl } from '../lib/api.js';
 import { $, copyText, debounce, extOf, fmtRelative, fmtSize, h, icon, isMobile } from '../lib/dom.js';
 import { highlight } from '../lib/md.js';
-import { confirmSheet, popover, toast } from '../lib/ui.js';
+import { diffList, diffStat } from '../lib/diff.js';
+import { confirmSheet, field, popover, sheet, toast } from '../lib/ui.js';
 import { LANGS, kindOf, openViewer, previewBody } from '../lib/viewer.js';
 import { navigate } from '../router.js';
 import { bus, prefs, setPref, state } from '../store.js';
@@ -88,6 +89,7 @@ export function showProjectPane(project) {
     unmountTerminal();
     build();
     setOpen(!isMobile() && prefs.projectPane !== false); // on a phone the pane covers the chat: open it on request
+    loadAttempts();
   }
   renderStrip();
   renderTabs();
@@ -167,6 +169,131 @@ bus.on('server:agent_job', (job) => {
   }
 });
 bus.on('server:checkpoint', (d) => data && d.project === data.slug && refreshProject(true));
+
+// ---------- parallel attempts: the same task by several models, each in a copy; keep the best (scorpi/attempts.py) ----------
+
+let att = { slug: '', list: [] };
+const loadAttempts = debounce(async () => {
+  if (!data) return;
+  const slug = data.slug;
+  try {
+    const res = await api.get('/api/projects/' + encodeURIComponent(slug) + '/attempts');
+    if (!data || data.slug !== slug) return;
+    att = { slug, list: res.attempts || [] };
+  } catch {
+    return;
+  }
+  built.delete('agents');
+  if (tab === 'agents' && visible()) fill('agents');
+}, 500);
+bus.on('server:attempts', (d) => data && d.project === data.slug && loadAttempts());
+const attemptStates = new Map();
+bus.on('server:agent_job', (job) => {
+  if (!data || job.attempt_of !== data.slug) return;
+  const before = attemptStates.get(job.id);
+  attemptStates.set(job.id, job.status + '|' + job.activity);
+  const rec = att.list[0];
+  const a = rec && rec.attempts.find((x) => x.job_id === job.id);
+  if (a) Object.assign(a, { status: job.status, activity: job.activity, steps_done: job.steps_done, steps_total: job.steps_total });
+  if (!before || before.split('|')[0] !== job.status) loadAttempts(); // finished: fetch its diff
+  else if (tab === 'agents' && visible()) fill('agents');
+});
+
+function attemptsNode() {
+  const rec = att.slug === (data && data.slug) ? att.list[0] : null;
+  if (!rec) return null;
+  const card = (a) => {
+    const running = a.status === 'running';
+    const applied = rec.applied === a.n;
+    return h('div.att-card' + (applied ? '.applied' : '') + (running ? '.running' : ''),
+      h('div.att-head', h('span.att-n', '#' + a.n), h('b.att-model', { title: a.model }, a.model_label || a.model), h('span.grow'),
+        applied ? h('span.badge.ok', 'applied') : h('span.badge' + (STATUS[a.status] || ['', ''])[1], (STATUS[a.status] || [a.status])[0])),
+      h('div.att-now', running ? h('span.job-pulse') : null, h('span', running ? a.activity || 'Working' : (a.result || a.activity || '').split('\n').find((l) => l.trim()) || '')),
+      !running && a.count !== undefined ? h('div.att-stat', a.count ? [`${a.count} file${a.count === 1 ? '' : 's'} `, diffStat(a.add, a.dele)] : h('span.muted', 'no changes')) : null,
+      h('div.att-acts',
+        !running && a.files && a.files.length ? h('button.btn.small.quiet', { onclick: () => sheet({ title: `Try #${a.n} · ${a.model_label}`, body: diffList(a.files, { open: a.files.length <= 3 }), foot: (close) => [h('button.btn.quiet', { onclick: close }, 'Close')] }) }, icon('diff'), 'Diff') : null,
+        a.conv_id ? h('a.btn.small.quiet', { href: '/c/' + a.conv_id, 'data-link': '' }, icon('chat'), 'Chat') : null,
+        !running && !applied && a.count ? h('button.btn.small.primary', { onclick: (e) => applyAttempt(e.currentTarget, rec, a) }, icon('check'), 'Use this') : null));
+  };
+  return h('div.pa.att-wrap', h('div.pc-sec.att',
+    h('div.pa-h', 'Attempts', h('span.count', rec.running ? `${rec.running} working` : `${rec.attempts.length} models`)),
+    h('div.att-task', rec.task),
+    h('div.att-grid', rec.attempts.map(card)),
+    h('div.att-foot', h('span.muted.small', rec.applied ? `Try #${rec.applied} is in the project (Changes → Checkpoints can undo it).` : 'Each model works in its own copy; the project changes only when you pick one.'), h('span.grow'),
+      h('button.btn.small.quiet', { onclick: () => discardAttempts(rec) }, icon('trash'), rec.running ? 'Stop & discard' : 'Discard'))));
+}
+
+async function applyAttempt(btn, rec, a) {
+  if (!(await confirmSheet(`Use try #${a.n}?`, `Its ${a.count} changed file${a.count === 1 ? '' : 's'} go into the project. A checkpoint is saved first, so you can undo it in Changes.`, { confirm: 'Use this one' }))) return;
+  btn.disabled = true;
+  try {
+    const out = await api.post('/api/attempts/' + rec.id + '/apply', { n: a.n });
+    toast(`Try #${a.n} applied`, { body: `${out.files} file${out.files === 1 ? '' : 's'} changed.` });
+    loadAttempts();
+    refreshProject(true);
+  } catch (err) {
+    btn.disabled = false;
+    toast(err.message, 'error');
+  }
+}
+
+async function discardAttempts(rec) {
+  if (!(await confirmSheet('Discard these attempts?', 'Their copies are deleted' + (rec.running ? ' and the ones still working stop' : '') + '. The project itself stays as it is.', { confirm: 'Discard', danger: true }))) return;
+  try {
+    await api.del('/api/attempts/' + rec.id);
+    loadAttempts();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+/** "Try with several models": the task, and which models; each gets its own copy of the project. */
+export async function startAttempts(task = '') {
+  if (!data) return toast('Open a project first');
+  const slug = data.slug;
+  const text = h('textarea.input', { rows: 4, placeholder: 'e.g. Add a search box that filters the recipes as you type.' });
+  text.value = task;
+  const list = h('div.att-models', h('span.muted.small', 'Finding strong coding models…'));
+  const chosen = new Set();
+  const extra = h('input.input', { placeholder: 'Another model, e.g. "glm 5" or "groq llama"' });
+  const draw = (models) => {
+    list.replaceChildren(...models.map((m) => {
+      const b = h('button.btn.small' + (chosen.has(m.ref) ? '.on' : ''), { type: 'button', title: m.ref, onclick: () => { chosen.has(m.ref) ? chosen.delete(m.ref) : chosen.add(m.ref); b.classList.toggle('on', chosen.has(m.ref)); } }, m.label);
+      return b;
+    }));
+  };
+  api.get('/api/attempts/models').then((r) => { (r.models || []).forEach((m) => chosen.add(m.ref)); draw(r.models || []); }).catch(() => draw([]));
+  sheet({
+    title: 'Try with several models',
+    body: h('div',
+      h('p.section-desc', 'The same task is done by each model at the same time, in its own copy of this project. Compare the results in the Agents tab and keep the best; the project only changes when you pick one.'),
+      field('Task', text),
+      field('Models', list, 'Strong coders from different services are picked for you. Click to leave one out.'),
+      field('Add a model (optional)', extra)),
+    foot: (close) => [
+      h('button.btn.quiet', { onclick: close }, 'Cancel'),
+      h('button.btn.primary', { onclick: async (e) => {
+        if (!text.value.trim()) return text.focus();
+        const models = [...chosen];
+        if (extra.value.trim()) models.push(extra.value.trim());
+        if (models.length < 2) return toast('Pick at least two models', 'warn');
+        e.currentTarget.disabled = true;
+        try {
+          await api.post('/api/projects/' + encodeURIComponent(slug) + '/attempts', { task: text.value.trim(), models });
+          close();
+          toast('Attempts started', { body: models.length + ' models are working on it. Follow them in the Agents tab.' });
+          tab = 'agents';
+          loadAttempts();
+          renderTabs();
+          showTab();
+        } catch (err) {
+          e.currentTarget.disabled = false;
+          toast(err.message, 'error');
+        }
+      } }, icon('bolt'), 'Start'),
+    ],
+  });
+}
 bus.on('server:git', (d) => data && d.project === data.slug && refreshProject(true));
 bus.on('project:term-count', (d) => data && d.slug === data.slug && renderTabs());
 
@@ -252,7 +379,7 @@ function fill(k) {
   built.add(k);
   if (k === 'agents') {
     const keep = el.scrollTop;
-    el.replaceChildren(agentsNode());
+    el.replaceChildren(...[attemptsNode(), agentsNode()].filter(Boolean));
     el.scrollTop = keep;
   } else if (k === 'preview') {
     if (!pv.els) previewMount(el);

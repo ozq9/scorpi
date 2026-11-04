@@ -13,7 +13,7 @@ import { bus, prefs, setPref, skillById, state } from '../store.js';
 import { browserRecognizer, createStreamSpeaker, hostSttAvailable, record, speak, stopSpeaking, sttRoute, sttUnavailableReason, transcribe, audioContext } from '../audio.js';
 import { renderCard } from './cards.js';
 import { canvasApply, canvasChip, canvasLoad, canvasReset, initCanvas } from './canvas.js';
-import { hideProjectPane, refreshProject, showProjectPane, toggleProjectPane } from './project.js';
+import { hideProjectPane, refreshProject, showProjectPane, startAttempts, toggleProjectPane } from './project.js';
 import { startVoice, stopVoice, voiceBar, voiceOn, voiceRefresh, voiceStatus } from './voice.js';
 import { pauseWake, resumeWake } from '../wake.js';
 import { navigate } from '../router.js';
@@ -1580,6 +1580,7 @@ function modeMenu() {
   composerMenu('mode', '', [
     { name: 'Plan first', desc: 'Next message: approve a plan before anything is built.', icon: 'route', checked: composer.plan,
       onPick: () => { composer.plan = !composer.plan; updateModeChip(); } },
+    state.project ? { name: 'Try several models', desc: 'Each model does it in a copy; keep the best one.', icon: 'bolt', onPick: () => startAttempts(els.input.value.trim()) } : null,
     'sep',
     ...AUTONOMY.map(([key, name, ic, desc]) => ({ name, desc, icon: ic, checked: current === key, onPick: () => setAutonomy(key) })),
   ]);
@@ -1932,12 +1933,13 @@ let codeCommands = [];
 const LOCAL_CODE_COMMANDS = [
   { name: 'plan', description: 'Your next message: see a plan to approve before anything is built', icon: 'route' },
   { name: 'undo', description: 'Undo the last agent run: the files go back to how they were before it', icon: 'history' },
+  { name: 'try', description: 'Try with several models at once, each in a copy; keep the best', icon: 'bolt' },
 ];
 function loadCodeCommands() {
   api.get('/api/code-commands').then((r) => (codeCommands = r.commands || [])).catch(() => {});
 }
 const projectCommands = () =>
-  (agentConversation() ? [...LOCAL_CODE_COMMANDS.filter((c) => c.name !== 'undo' || state.project), ...codeCommands] : [])
+  (agentConversation() ? [...LOCAL_CODE_COMMANDS.filter((c) => !['undo', 'try'].includes(c.name) || state.project), ...codeCommands] : [])
     .map((c) => ({ id: c.name, name: c.name, description: c.description, icon: c.icon, code: true }));
 
 async function undoLastRun() {
@@ -2052,6 +2054,8 @@ function pickSlash(i) {
       toast('Plan first', { body: 'Describe what to build: the agent shows a plan to approve before it changes anything.', timeout: 2600 });
     } else if (s.id === 'undo') {
       undoLastRun();
+    } else if (s.id === 'try') {
+      startAttempts();
     } else {
       els.input.value = '/' + s.id + ' '; // Enter sends it; anything typed after it goes along
     }

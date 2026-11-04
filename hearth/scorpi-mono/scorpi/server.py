@@ -22,7 +22,7 @@ import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import VERSION, agent, agents, coding, db, discord, events, gallery, github, gitops, knowledge, llm, looks, music, notify, opencode, scheduler, updates, usage, voice
+from . import VERSION, agent, agents, attempts, coding, db, discord, events, gallery, github, gitops, knowledge, llm, looks, music, notify, opencode, scheduler, updates, usage, voice
 from .config import DATA_DIR, IS_WINDOWS, PUBLIC_DIR, SETTINGS, UPLOADS, WORKSPACE
 from .mcp import MANAGER, PRESETS
 from .tools import GROUPS, TOOLS, ToolError, catalog, check_access, module_available
@@ -1933,6 +1933,53 @@ def project_review(h, path, folder):
     if out["model"]:
         out["model_label"] = llm.label(out["model"])
     h.send_json(out)
+
+
+@_git_route("GET", "/attempts")
+def project_attempts(h, path, folder):
+    h.send_json({"attempts": attempts.for_project(folder)})
+
+
+@_git_route("POST", "/attempts")
+def project_attempts_start(h, path, folder):
+    body = h.body_json()
+    models = []
+    for name in body.get("models") or []:
+        try:
+            models.append(llm.find_model(name))
+        except ValueError as exc:
+            raise gitops.GitError(str(exc))
+    try:
+        h.send_json(attempts.start(folder, body.get("task"), models, body.get("title") or ""))
+    except attempts.AttemptError as exc:
+        raise gitops.GitError(str(exc))
+
+
+@route("GET", "/api/attempts/models")
+def attempt_models(h):
+    picks = attempts.suggest_models(int(h.query.get("count") or 3))
+    h.send_json({"models": [{"ref": m, "label": llm.label(m)} for m in picks]})
+
+
+@route("POST", "/api/attempts/([a-f0-9]+)/apply")
+def attempt_apply(h, rid):
+    if not h.is_owner:
+        return h.error("Only the owner of this Scorpi can do that.", 403)
+    try:
+        h.send_json(attempts.apply(rid, h.body_json().get("n") or 0))
+    except (attempts.AttemptError, gitops.GitError) as exc:
+        h.error(str(exc))
+
+
+@route("DELETE", "/api/attempts/([a-f0-9]+)")
+def attempt_discard(h, rid):
+    if not h.is_owner:
+        return h.error("Only the owner of this Scorpi can do that.", 403)
+    try:
+        attempts.discard(rid)
+        h.send_json({"ok": True})
+    except attempts.AttemptError as exc:
+        h.error(str(exc))
 
 
 @route("GET", "/api/code-commands")

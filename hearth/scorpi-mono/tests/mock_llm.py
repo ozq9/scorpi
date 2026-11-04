@@ -4,6 +4,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 SCRIPT = []  # list of replies: {"content": str} or {"tool_calls": [{"name", "arguments"}]}
+BY_MODEL = {}  # model id -> its own list of replies (parallel agents on different models)
 REQUESTS = []
 MODELS = {"data": [{"id": "qwen3-coder-480b"}, {"id": "llama-3.3-70b"}, {"id": "gpt-oss-120b"}]}
 
@@ -23,7 +24,8 @@ class H(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         payload = json.loads(self.rfile.read(n) or b"{}")
         REQUESTS.append({"path": self.path, "payload": payload, "headers": dict(self.headers)})
-        reply = SCRIPT.pop(0) if SCRIPT else {"content": "ok"}
+        own = BY_MODEL.get(payload.get("model"))
+        reply = own.pop(0) if own else SCRIPT.pop(0) if SCRIPT else {"content": "ok"}
         if reply.get("status"):
             self.send_response(reply["status"])
             self.end_headers()

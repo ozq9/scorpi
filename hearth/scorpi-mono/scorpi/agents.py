@@ -229,6 +229,7 @@ class Job:
         self.checkpoint = ""  # the checkpoint taken before the current run (scorpi/gitops.py)
         self.planning = False  # this run only plans (read-only) and asks the user to approve the plan
         self.run_note = ""  # what the chat shows for a run the job started by itself
+        self.attempt_of = ""  # the project this job is one of several parallel attempts for (scorpi/attempts.py)
         self.approved_plan = ""  # set when the user approves: the job then builds it in a new run
         self._published = 0.0
 
@@ -479,7 +480,7 @@ class Job:
                 "updated": self.updated, "conv_id": self.conv_id, "parent_conv": self.parent_conv, "origin": self.origin,
                 "workdir": self.workdir, "project": self.project, "checkpoint": self.checkpoint, "live": True,
                 "planning": self.planning and self.status == "running", "run_id": self.run.id if self.run else "",
-                "run_note": self.run_note}
+                "run_note": self.run_note, "attempt_of": self.attempt_of}
 
     def publish(self, force=False):
         now = time.time()
@@ -582,7 +583,10 @@ def job(job_id):
     restored.started, restored.updated = row["created"], row["updated"]
     restored.oc_session = row.get("oc_session") or ""
     restored.activity = {"done": "Finished", "failed": "Failed", "stopped": "Stopped"}.get(restored.status, "Interrupted (Scorpi restarted)")
-    if "code" in json.loads(agent.get("groups") or "[]"):
+    if row["origin"] == "attempt":
+        from .attempts import attempt_of_job
+        restored.attempt_of, restored.workdir = attempt_of_job(job_id)  # its own copy of the project, not a project folder
+    elif "code" in json.loads(agent.get("groups") or "[]"):
         restored.project = row.get("project") or slug(row["title"], "project")
         restored.workdir = project_path(restored.project)
     return restored
@@ -655,6 +659,8 @@ def _project_of(row):
     """The project folder a job record belongs to ('' for jobs that are not coding work)."""
     if row.get("project"):
         return row["project"]
+    if row.get("origin") == "attempt":
+        return ""  # a parallel attempt works in a copy, not in a project of its own
     agent = get(row.get("agent_id"))
     if agent and "code" in json.loads(agent.get("groups") or "[]"):
         return slug(row["title"], "project")
