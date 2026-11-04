@@ -173,8 +173,30 @@ const SESSION = [
   ['ok', '  ⎿ exit 0 · 12 passed'],
   ['answer', 'Added a dark mode toggle to the header. It follows the system until you pick one, and the tests pass.'],
 ];
-const term = document.querySelector('[data-term]');
-const termReplay = document.querySelector('[data-term-replay]');
+// #free: a free tier runs out, a loop is caught, every model rests, and the work carries on after the reset
+const LIMITS = [
+  ['cmd', 'scorpi-code "add an order form with validation"'],
+  ['dim', 'model Groq · qwen3-coder · autonomy auto'],
+  ['step', 'Editing order.js'],
+  ['out', 'order.js', ' +42'],
+  ['warn', '  ! Groq · qwen3-coder is at its rate limit (7m 12s): Cerebras · qwen3-coder takes over'],
+  ['step', 'Running the tests'],
+  ['del', '  ⎿ FAILED · test_order.py: email "a@b" was accepted'],
+  ['step', 'Editing order.js'],
+  ['step', 'Running the tests'],
+  ['del', '  ⎿ FAILED · the same error again'],
+  ['warn', '  ! Loop noticed: the same error came back 3 times. Step back and change approach'],
+  ['step', 'Reading validate.js'],
+  ['step', 'Editing validate.js'],
+  ['warn', '  ! Every model is at its usage limit. Paused until 01:00, when Groq resets'],
+  ['dim', '  … 01:00 · the limits reset · continuing where it stopped'],
+  ['step', 'Running the tests'],
+  ['ok', '  ⎿ exit 0 · 9 passed'],
+  ['step', 'Looking at the page in a browser'],
+  ['ok', '  ⎿ no errors · 1280×800'],
+  ['b', 'Verified', ' · tests pass (9) · syntax checks pass (3 files) · the page opens without errors'],
+  ['answer', 'Added the order form with validation and a thank-you page.'],
+];
 function termLine(kind, text, extra) {
   const row = document.createElement('div');
   const span = (cls, t) => { const s = document.createElement('span'); if (cls) s.className = cls; s.textContent = t; return s; };
@@ -185,47 +207,82 @@ function termLine(kind, text, extra) {
   else if (kind === 'plan') row.append(span('t-b', text));
   else if (kind === 'ask') row.append(span('t-b', text), span('', extra));
   else if (kind === 'answer') row.append(document.createElement('br'), span('', text));
-  else row.append(span({ dim: 't-dim', add: 't-add', del: 't-del', ok: 't-ok' }[kind] || '', text));
+  else row.append(span({ dim: 't-dim', add: 't-add', del: 't-del', ok: 't-ok', warn: 't-warn' }[kind] || '', text));
   return row;
 }
-let termRun = 0;
-async function playTerm() {
-  const id = ++termRun;
-  termReplay.hidden = true;
-  term.replaceChildren();
-  const cursor = document.createElement('span');
-  cursor.className = 't-cur';
-  for (const [kind, text, extra] of SESSION) {
-    if (id !== termRun) return;
-    if (kind === 'cmd' || kind === 'answer') {
-      const row = termLine(kind, '', extra);
-      const target = row.lastChild;
-      term.append(row);
-      row.append(cursor);
-      for (const ch of text) {
-        if (id !== termRun) return;
-        target.textContent += ch;
-        await wait(kind === 'cmd' ? 38 + Math.random() * 40 : 12);
+// a terminal figure that types its session out when it scrolls into view (reduced motion: shown at once)
+function setupTerm(term, session, termReplay) {
+  let termRun = 0;
+  async function playTerm() {
+    const id = ++termRun;
+    termReplay.hidden = true;
+    term.replaceChildren();
+    const cursor = document.createElement('span');
+    cursor.className = 't-cur';
+    for (const [kind, text, extra] of session) {
+      if (id !== termRun) return;
+      if (kind === 'cmd' || kind === 'answer') {
+        const row = termLine(kind, '', extra);
+        const target = row.lastChild;
+        term.append(row);
+        row.append(cursor);
+        for (const ch of text) {
+          if (id !== termRun) return;
+          target.textContent += ch;
+          await wait(kind === 'cmd' ? 38 + Math.random() * 40 : 12);
+        }
+        await wait(kind === 'cmd' ? 500 : 200);
+      } else {
+        term.append(termLine(kind, text, extra));
+        term.lastChild.append(cursor);
+        await wait(kind === 'ask' ? 900 : kind === 'step' ? 520 : kind === 'warn' ? 900 : 240);
       }
-      await wait(kind === 'cmd' ? 500 : 200);
-    } else {
-      term.append(termLine(kind, text, extra));
-      term.lastChild.append(cursor);
-      await wait(kind === 'ask' ? 900 : kind === 'step' ? 520 : 240);
     }
+    const prompt = document.createElement('div');
+    prompt.append(document.createElement('br'), Object.assign(document.createElement('span'), { className: 't-b', textContent: '› ' }), cursor);
+    term.append(prompt);
+    termReplay.hidden = false;
   }
-  const prompt = document.createElement('div');
-  prompt.append(document.createElement('br'), Object.assign(document.createElement('span'), { className: 't-b', textContent: '› ' }), cursor);
-  term.append(prompt);
-  termReplay.hidden = false;
-}
-if (term) {
   if (still) {
-    for (const [kind, text, extra] of SESSION) term.append(termLine(kind, text, extra));
+    for (const [kind, text, extra] of session) term.append(termLine(kind, text, extra));
   } else {
     new IntersectionObserver(([e], obs) => {
       if (e.isIntersecting) { obs.disconnect(); playTerm(); }
     }, { threshold: 0.35 }).observe(term);
     termReplay.addEventListener('click', playTerm);
+  }
+}
+for (const [name, session] of [['', SESSION], ['limits', LIMITS]]) {
+  const el = document.querySelector(name ? `[data-term="${name}"]` : '[data-term=""], [data-term]:not([data-term="limits"])');
+  const replay = document.querySelector(name ? `[data-term-replay="${name}"]` : '[data-term-replay=""], [data-term-replay]:not([data-term-replay="limits"])');
+  if (el && replay) setupTerm(el, session, replay);
+}
+
+// ---------- #proof: drag across the visual check to compare before and now ----------
+for (const stage of document.querySelectorAll('[data-compare]')) {
+  const top = stage.querySelector('.cmp-top');
+  const handle = stage.querySelector('.cmp-handle');
+  const range = stage.querySelector('.cmp-range');
+  const set = (v) => { top.style.clipPath = `inset(0 ${100 - v}% 0 0)`; handle.style.left = v + '%'; };
+  range.addEventListener('input', () => set(+range.value));
+  set(+range.value);
+  if (!still) {
+    // a slow sweep once it is in view, so it is obvious that it moves
+    new IntersectionObserver(([e], obs) => {
+      if (!e.isIntersecting) return;
+      obs.disconnect();
+      let t = 0;
+      const tick = () => {
+        if (range.dataset.touched) return;
+        t += 1;
+        const v = 50 + 32 * Math.sin(t / 38);
+        range.value = v;
+        set(v);
+        if (t < 240) requestAnimationFrame(tick);
+        else set(+(range.value = 50));
+      };
+      requestAnimationFrame(tick);
+    }, { threshold: 0.5 }).observe(stage);
+    range.addEventListener('pointerdown', () => (range.dataset.touched = '1'));
   }
 }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scorpi, a local-first AI agent for Windows</title>
-<meta name="description" content="Scorpi is a free, local-first AI agent for Windows: chat, live canvas, a coding agent with plan mode, reviews and a terminal, voice and MCP. Runs on free models, from Ollama to 25+ free cloud tiers.">
+<meta name="description" content="Scorpi is a free, local-first AI agent for Windows: chat, live canvas, a coding agent that proves its work (tests first, a look at the page, proof after every run), voice and MCP. Runs on free models, from Ollama to 25+ free cloud tiers, and never stops at a usage limit.">
 <meta name="theme-color" content="#000000">
 <meta property="og:title" content="Scorpi, a local-first AI agent for Windows">
 <meta property="og:description" content="Chat, live canvas, coding agents and voice in one app. Bring any model.">
@@ -30,6 +30,7 @@
   <nav aria-label="Sections">
     <a href="#features">Features</a>
     <a href="#code">Coding</a>
+    <a href="#proof">Proof</a>
     <a href="#models">Free models</a>
     <a href="#inside">Screens</a>
     <a href="/gallery">Gallery</a>
@@ -44,7 +45,7 @@
 
   <section class="hero pad">
     <h1>A local-first AI agent for Windows</h1>
-    <p class="sub">Chat, live canvas, a coding agent and voice in one app. Run models offline with Ollama, on more than 25 free cloud tiers, or with your own keys. Free, all of it.</p>
+    <p class="sub">Chat, live canvas, a coding agent that proves its work, and voice in one app. Run models offline with Ollama, on more than 25 free cloud tiers, or with your own keys. It waits out usage limits instead of stopping. Free, all of it.</p>
 
     <div class="get" data-tabs>
       <div class="tabs" role="tablist" aria-label="Ways to install">
@@ -90,9 +91,9 @@
     <ul class="list">
       <li><b>Live canvas</b><span>Answers come with charts, maps, tables and cards next to the chat.</span></li>
       <li><b>Agents</b><span>Coder, Researcher, Writer, Analyst and Operator take bigger jobs in the background. Create your own from chat, with schedules.</span></li>
-      <li><b>Coding</b><span>The Coder plans, builds, tests and fixes projects, checks every edit, and asks a second model for a review. In the app or in a terminal. <a href="#code">More below</a>.</span></li>
+      <li><b>Coding</b><span>The Coder plans, builds, tests and fixes projects, checks every edit, looks at the pages it builds, and ends every run with proof of what it verified. In the app or in a terminal. <a href="#code">More below</a>.</span></li>
       <li><b>GitHub</b><span>Clone your repos or open any folder. A side panel shows every helper agent, a live preview with its console, the diff of each run (undo in one click), a terminal, commits, pull requests and issues the Coder fixes.</span></li>
-      <li><b>Any model</b><span>Ollama, Groq, Gemini, OpenRouter, Ollama Cloud, Cloudflare and 20 more free tiers. Falls back to the next model when a free tier runs out.</span></li>
+      <li><b>Any model</b><span>Ollama, Groq, Gemini, OpenRouter, Ollama Cloud, Cloudflare and 20 more free tiers. Works around a free tier at its limit, and pauses and carries on by itself when all of them are. <a href="#free">More below</a>.</span></li>
       <li><b>Voice</b><span>Push to talk with local speech recognition. Interrupt it mid-sentence.</span></li>
       <li><b>Desktop</b><span>Hold Ctrl + Win over any window and ask about it. Scorpi sees what you mean.</span></li>
       <li><b>MCP and plugins</b><span>Connect MCP servers over stdio or HTTP. Plugins add panes, commands and hooks.</span></li>
@@ -127,6 +128,38 @@
     </ul>
   </section>
 
+  <section class="pad" id="proof">
+    <h2>Proof, not promises</h2>
+    <p class="lead">"Done!" from a model means little. Scorpi checks the work itself and says what it checked, and only what happened after the last change counts.</p>
+
+    <figure class="compare" aria-label="The same page before and after an agent's run, as Scorpi's visual check captured them. Drag to compare.">
+      <div class="cmp-stage" data-compare>
+        <img src="/img/shots/page-after.webp" alt="After the run: a sale banner, an order button, a discounted pie and an order form" width="1280" height="800" loading="lazy">
+        <div class="cmp-top"><img src="/img/shots/page-before.webp" alt="Before the run: the bakery page with its menu, opening hours and address" width="1280" height="800" loading="lazy"></div>
+        <div class="cmp-handle" aria-hidden="true"></div>
+        <input class="cmp-range" type="range" min="0" max="100" value="50" aria-label="Compare before and after">
+        <span class="cmp-tag l">before</span><span class="cmp-tag r">now</span>
+      </div>
+      <div class="proof" aria-label="The proof card at the end of the run">
+        <p><b>✓ Verified</b> <span class="dim">· 3 files changed</span></p>
+        <p class="ok">✓ Tests pass: 9 passed · pytest -q</p>
+        <p class="ok">✓ Syntax checks pass (3 files)</p>
+        <p class="ok">✓ The page opens without errors · 26% of it changed</p>
+        <p class="dim">Not checked: nothing</p>
+      </div>
+    </figure>
+    <p class="fine fig">Fig 3. A visual check, captured by Scorpi: the agent opens the page in a hidden browser, sees it and its errors, and the chat compares it with the page before the run (drag across it). With it, the kind of proof card that ends a run.</p>
+
+    <ul class="list wide">
+      <li><b>Tests first</b><span>The agent only writes failing tests and shows them to you. Approved, they are the contract: it can't change them without asking, and it is done when they pass. <span class="hi">/tdd</span> or Shift+Tab.</span></li>
+      <li><b>It looks at the page</b><span>A hidden browser screenshot of what it built, plus script errors, files that fail to load, broken images and sideways scrolling. A page with errors sends it back to work.</span></li>
+      <li><b>Proof of work</b><span>Every run ends with a card of what was verified after the last change, and what nobody checked. Jobs, notifications and parallel attempts show it too.</span></li>
+      <li><b>No invented packages</b><span>Before anything is installed, each package is looked up. Made-up names are refused; brand-new or look-alike packages wait for your OK.</span></li>
+      <li><b>Fix it</b><span>When a dev server crashes, even while you are elsewhere, one click hands the error, the command and the recent changes to the agent.</span></li>
+      <li><b>Learns from you</b><span>Correct it once ("don't use jQuery") and it offers a rule for AGENTS.md, which every coding agent reads next time.</span></li>
+    </ul>
+  </section>
+
   <section class="pad" id="models">
     <h2>Free models, lots of them</h2>
     <p class="lead">Paste a free key and its models show up everywhere. When one runs out of quota or goes down, Scorpi moves on to the next and says so. <span class="hi">Automatic</span> picks the strongest coding model you have.</p>
@@ -146,12 +179,39 @@
     </div>
   </section>
 
+  <section class="pad" id="free">
+    <h2>Made for free models</h2>
+    <p class="lead">Free tiers run out, small models fumble tool calls and go in circles. Scorpi is built around that, so free models get real work done.</p>
+
+    <figure class="term" aria-label="A session where a model hits its rate limit and another takes over, a loop is noticed, every model reaches its limit and the work continues at 01:00, ending verified.">
+      <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>~/projects/sunrise-bakery</span></div>
+      <pre class="term-body" data-term="limits" aria-hidden="true"></pre>
+      <noscript><pre class="term-body">$ scorpi-code "add an order form with validation"</pre></noscript>
+    </figure>
+    <div class="demo-foot term-foot">
+      <p class="fine">Fig 4. A free tier runs out, a loop is caught, every model reaches its limit at once, and the work carries on by itself after the reset.</p>
+      <button class="replay" type="button" data-term-replay="limits" hidden>replay</button>
+    </div>
+
+    <ul class="list wide">
+      <li><b>Never stops at a limit</b><span>Rate-limit headers, "try again in 7 minutes" and daily quotas are remembered. Work moves to another provider at once, and when all are at their limit it pauses and carries on at the first reset.</span></li>
+      <li><b>Overnight queue</b><span>Line up tasks per project; Scorpi works through them in the hours you pick, while models have requests left, and leaves a report. Upkeep jobs (dependencies, tests, security, README) join on a schedule.</span></li>
+      <li><b>Your own leaderboard</b><span>Every test run, check, undo and parallel attempt counts for the model that did it. <span class="hi">Test my free models</span> runs five real tasks with hidden tests. Automatic picks follow the results.</span></li>
+      <li><b>Sloppy tool calls work</b><span>Broken JSON, wrong tool or parameter names and calls written as text are repaired. Models without tool calling get a text format and still use every tool.</span></li>
+      <li><b>Loop guard</b><span>The same error three times, or an edit undone and redone, and the agent has to change approach. Still stuck? A stronger model takes over.</span></li>
+      <li><b>A model for each step</b><span>Summaries and titles go to a fast model; Thrifty starts coding on it too and steps up when it struggles, saving the strong model's requests.</span></li>
+      <li><b>Private when you want</b><span>Each provider shows what it says it does with your prompts. Private projects use only providers that don't train on them, and API keys and passwords never leave your PC.</span></li>
+    </ul>
+  </section>
+
   <section class="inside" id="inside">
     <div class="pad inside-head">
       <h2>Screens</h2>
       <div class="tabs" role="tablist" aria-label="Screens of the app" data-tabs-for="shots">
         <button role="tab" id="s-code" aria-controls="v-code" aria-selected="true">code</button>
         <button role="tab" id="s-agents" aria-controls="v-agents" aria-selected="false" tabindex="-1">agents</button>
+        <button role="tab" id="s-scores" aria-controls="v-scores" aria-selected="false" tabindex="-1">models</button>
+        <button role="tab" id="s-queue" aria-controls="v-queue" aria-selected="false" tabindex="-1">queue</button>
         <button role="tab" id="s-studio" aria-controls="v-studio" aria-selected="false" tabindex="-1">studio</button>
         <button role="tab" id="s-voice" aria-controls="v-voice" aria-selected="false" tabindex="-1">voice</button>
       </div>
@@ -159,19 +219,27 @@
     <div class="views">
       <figure class="view" id="v-code" role="tabpanel" aria-labelledby="s-code">
         <div class="screen"><img src="/img/shots/code.webp" alt="A coding project: the Coder's plan for a recipe box app with numbered steps, Approve and build, Request changes and Reject, next to the project panel saying Plan ready" width="2000" height="1250" loading="lazy"></div>
-        <figcaption class="pad fine">Fig 3. Code. Plan first: the Coder looked at the folder and proposes a plan. Approve it, or write what should change.</figcaption>
+        <figcaption class="pad fine">Fig 5. Code. Plan first: the Coder looked at the folder and proposes a plan. Approve it, or write what should change.</figcaption>
       </figure>
       <figure class="view" id="v-agents" role="tabpanel" aria-labelledby="s-agents" hidden>
         <div class="screen"><img src="/img/shots/agents.webp" alt="The Agents page: example requests and the built-in team of Coder, Researcher, Writer, Analyst and Operator" width="1600" height="1000" loading="lazy"></div>
-        <figcaption class="pad fine">Fig 4. Agents. Hand off a job in chat and follow its progress, or ask for a new agent: <span class="hi">remind me every day at 13:00 to take a break</span>.</figcaption>
+        <figcaption class="pad fine">Fig 6. Agents. Hand off a job in chat and follow its progress, or ask for a new agent: <span class="hi">remind me every day at 13:00 to take a break</span>.</figcaption>
+      </figure>
+      <figure class="view" id="v-scores" role="tabpanel" aria-labelledby="s-scores" hidden>
+        <div class="screen"><img src="/img/shots/scores.webp" alt="Usage, Models: which models work best here, ranked by jobs finished, edits that pass checks, test runs passing, work kept, parallel attempts won and the benchmark" width="2000" height="1250" loading="lazy"></div>
+        <figcaption class="pad fine">Fig 7. Models. Your own leaderboard, from what each model actually did on your projects, plus <span class="hi">Test my free models</span>.</figcaption>
+      </figure>
+      <figure class="view" id="v-queue" role="tabpanel" aria-labelledby="s-queue" hidden>
+        <div class="screen"><img src="/img/shots/queue.webp" alt="The queue on the Code page: two tasks waiting for tonight, two done and verified, and upkeep jobs to update dependencies weekly and keep the tests green daily" width="2000" height="1250" loading="lazy"></div>
+        <figcaption class="pad fine">Fig 8. Queue. Tasks for tonight and upkeep jobs; each finished one says whether it was verified.</figcaption>
       </figure>
       <figure class="view" id="v-studio" role="tabpanel" aria-labelledby="s-studio" hidden>
         <div class="screen"><img src="/img/shots/studio.webp" alt="The Studio: a box to describe a look, and a grid of styles: Mono (the default), Midnight, Paper and Terminal" width="1600" height="1000" loading="lazy"></div>
-        <figcaption class="pad fine">Fig 5. Studio. Every colour, font and radius is a token. Edit them live, or describe a look and Scorpi writes the style.</figcaption>
+        <figcaption class="pad fine">Fig 9. Studio. Every colour, font and radius is a token. Edit them live, or describe a look and Scorpi writes the style.</figcaption>
       </figure>
       <figure class="view" id="v-voice" role="tabpanel" aria-labelledby="s-voice" hidden>
         <div class="screen zoom"><img src="/img/shots/voice.webp" alt="Voice mode: Hold Space, speak, then let go" width="1600" height="1000" loading="lazy"></div>
-        <figcaption class="pad fine">Fig 6. Voice. Hold Space, speak, let go. Speech recognition runs locally with faster-whisper.</figcaption>
+        <figcaption class="pad fine">Fig 10. Voice. Hold Space, speak, let go. Speech recognition runs locally with faster-whisper.</figcaption>
       </figure>
     </div>
   </section>
@@ -260,7 +328,13 @@
       <details><summary>Is there a terminal version?</summary>
         <p>Yes: <span class="hi">scorpi-code</span>, in the app's folder. Run it in any project for an interactive session, or <span class="hi">scorpi-code -p "task"</span> for scripts and CI. It uses the app's models, keys and settings, and the folder shows up in the app.</p></details>
       <details><summary>Which free model is best for coding?</summary>
-        <p>Set the coding model to Automatic and Scorpi picks the strongest coder among the services you added (Qwen3 Coder, Kimi K2, Devstral, gpt-oss and the like, marked best code). Add two or three free keys, so another one takes over when a free tier runs out.</p></details>
+        <p>Set the coding model to Automatic and Scorpi picks the strongest coder among the services you added (Qwen3 Coder, Kimi K2, Devstral, gpt-oss and the like, marked best code), and learns from your own results which one works best for you. <span class="hi">Test my free models</span> under Usage, Models gives each one five real tasks. Add two or three free keys, so another one takes over when a free tier runs out.</p></details>
+      <details><summary>What happens when the free limits run out?</summary>
+        <p>Scorpi remembers each model's limits and moves to another one at once. When every model is at its limit, the work pauses and says when it continues, then carries on by itself at the first reset, also after a restart. With Ollama installed it can keep going on a local model instead.</p></details>
+      <details><summary>Do the free providers see my API keys or train on my code?</summary>
+        <p>Keys, tokens and passwords are replaced by placeholders before anything reaches a cloud model. Each provider shows what it says it does with your prompts; some free tiers may use them for training. Make a project private, or turn on Private mode, and only providers that say they don't train on it are used.</p></details>
+      <details><summary>How do I know the code actually works?</summary>
+        <p>Every coding run ends with a proof card: the tests, checks and page views that passed after the last change, and what nobody checked. With Tests first you approve the tests before anything is built, and the agent is only done when they pass.</p></details>
       <details><summary>How do I uninstall it?</summary>
         <p>Settings, Apps, Scorpi, Uninstall, or <span class="hi">Scorpi-Setup.exe --uninstall --quiet</span>. You choose whether chats and settings stay.</p></details>
       <details><summary>How do I verify the download?</summary>
