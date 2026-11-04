@@ -24,7 +24,7 @@ bus.on('server:term', (t) => {
   const s = S(t.slug);
   const known = s.terms.get(t.id);
   const term = known || { ...t, output: '' };
-  Object.assign(term, { status: t.status, code: t.code, ended: t.ended, command: t.command });
+  Object.assign(term, { status: t.status, code: t.code, ended: t.ended, command: t.command, crash: t.crash || term.crash || null });
   if (t.chunk) term.output = (term.output + t.chunk).slice(-300000);
   s.terms.set(t.id, term);
   scanUrls(s, t.chunk);
@@ -125,7 +125,7 @@ function blockNode(t) {
 
 function fillHead(t, block, head) {
   const running = t.status === 'running';
-  block.className = 'tm-block ' + t.status;
+  block.className = 'tm-block ' + t.status + (t.crash ? ' crashed' : '');
   const send = running
     ? h('input.tm-stdin', { placeholder: 'input…', title: 'Send a line to this command (Enter)', onkeydown: (e) => {
         if (e.key !== 'Enter') return;
@@ -133,13 +133,16 @@ function fillHead(t, block, head) {
         e.target.value = '';
       } })
     : null;
+  const crashed = block.querySelector('.tm-crash');
+  if (t.crash && !crashed) head.after(h('div.tm-crash', icon('bolt'), h('span', t.crash.running ? 'Crashed while running: ' : 'Failed: '), h('b', t.crash.line)));
+  else if (crashed && t.crash) crashed.querySelector('b').textContent = t.crash.line;
   head.replaceChildren(...[
     h('span.mk.' + (running ? 'active' : t.status === 'done' ? 'done' : t.status === 'failed' ? 'failed' : 'pending')),
     h('span.tm-c', t.command),
     h('span.grow'),
     send,
     h('span.tm-meta', running ? 'running' : t.status === 'stopped' ? 'stopped' : `exit ${t.code}` + (t.ended && t.started ? ` · ${Math.max(0, t.ended - t.started).toFixed(1)}s` : '')),
-    t.status === 'failed' ? h('button.btn.small.quiet', { title: 'Send the output to the agent and ask it to fix the problem', onclick: () => askFix(t) }, icon('wand'), 'Fix') : null,
+    t.status === 'failed' || t.crash ? h('button.btn.small' + (t.crash && running ? '.primary' : '.quiet'), { title: 'Send the error, the command and what changed recently to the agent, and have it fix the problem', onclick: () => askFix(t) }, icon('wand'), 'Fix it') : null,
     running ? h('button.icon-btn', { title: 'Stop', onclick: () => api.post(`/api/terminal/${t.id}/stop`).catch((e) => toast(e.message, 'error')) }, icon('stop')) : null,
     !running ? h('button.icon-btn', { title: 'Run again', onclick: () => run(mounted.ctx, t.command) }, icon('retry')) : null,
   ].filter(Boolean));
@@ -155,7 +158,7 @@ function patchBlock(t, chunk) {
     node.pre.appendChild(document.createTextNode(chunk));
     if (node.pre.textContent.length > 320000) node.pre.textContent = t.output;
   }
-  if (!node.block.classList.contains(t.status)) {
+  if (!node.block.classList.contains(t.status) || (t.crash && !node.block.classList.contains('crashed'))) {
     const typing = node.head.querySelector('.tm-stdin') === document.activeElement;
     if (!typing || t.status !== 'running') fillHead(t, node.block, node.head);
   }
@@ -167,12 +170,18 @@ function renderUrls() {
   mounted.urls.replaceChildren(...[...s.urls].slice(-3).map((u) => h('button.chip.small.tm-url', { type: 'button', title: 'Open in the pane\'s browser', onclick: () => mounted.ctx.openUrl(u) }, icon('globe'), u.replace(/^https?:\/\//, ''), h('span.muted', ' → Preview'))));
 }
 
-function askFix(t) {
-  const tail = (t.output || '').trim().split('\n').slice(-60).join('\n').slice(-5000);
-  mounted.ctx.ask({
-    text: `I ran \`${t.command}\` in the project folder and it failed (exit code ${t.code}). The output:\n\n\`\`\`\n${tail}\n\`\`\`\n\nFind the cause, fix it, and run the command again to check.`,
-    display: `Fix: \`${t.command}\` failed`,
-  });
+// Fix it: the server writes the request (the error, the command and what changed recently, scorpi/crash.py).
+async function askFix(t) {
+  try {
+    const msg = await api.get(`${base(mounted.slug)}/fix-prompt?term=${encodeURIComponent(t.id)}`);
+    mounted.ctx.ask(msg);
+  } catch (err) {
+    const tail = (t.output || '').trim().split('\n').slice(-60).join('\n').slice(-5000);
+    mounted.ctx.ask({
+      text: `I ran \`${t.command}\` in the project folder and it failed (exit code ${t.code}). The output:\n\n\`\`\`\n${tail}\n\`\`\`\n\nFind the cause, fix it, and run the command again to check.`,
+      display: `Fix: \`${t.command}\` failed`,
+    });
+  }
 }
 
 async function clearFinished(slug) {

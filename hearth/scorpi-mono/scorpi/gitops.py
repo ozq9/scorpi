@@ -500,9 +500,13 @@ OEM = "cp%d" % ctypes.windll.kernel32.GetOEMCP() if IS_WINDOWS else "utf-8"
 ANSI =re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07|\x1b[()][A-Z0-9]")
 
 
+WATCHERS = []  # fn(term, chunk) after each batch of output (crash.py spots crashes)
+
+
 class Term:
     def __init__(self, slug, cwd, command):
         self.id = uuid.uuid4().hex[:10]
+        self.crash = None  # {"line", "at", "running"} once it printed an error or failed (crash.py)
         self.slug = slug
         self.command = command
         self.output = ""
@@ -564,6 +568,11 @@ class Term:
     def _flush(self):
         with self._mx:
             chunk, self._pending, self._timer = self._pending, "", None
+        for fn in WATCHERS:
+            try:
+                fn(self, chunk)
+            except Exception:  # noqa: BLE001 - a watcher never breaks the terminal
+                pass
         events.publish("term", dict(self.public(output=False), chunk=chunk))
 
     def write(self, text):
@@ -591,7 +600,7 @@ class Term:
 
     def public(self, output=True):
         out = {"id": self.id, "slug": self.slug, "command": self.command, "status": "running" if self.status == "stopping" else self.status,
-               "code": self.code, "started": self.started, "ended": self.ended}
+               "code": self.code, "started": self.started, "ended": self.ended, "crash": self.crash}
         if output:
             out["output"] = self.output[-120000:]
         return out

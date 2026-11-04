@@ -313,6 +313,29 @@ function projectsChanged() {
 
 const canNotify = () => (typeof Notification !== 'undefined' ? Notification.permission : 'denied') === 'granted';
 
+// A command in a project's Terminal crashed (scorpi/crash.py): offer to fix it unless its Terminal is on screen.
+function crashToast(d) {
+  if (!d.slug || !d.running) return;
+  const terminalOpen = location.pathname === '/code/' + d.slug && document.querySelector('.tm-block.crashed');
+  if (terminalOpen) return;
+  toast(`${d.command.slice(0, 40)} crashed`, {
+    body: d.line,
+    type: 'warn',
+    timeout: 12000,
+    action: {
+      label: 'Fix it',
+      run: async () => {
+        try {
+          await api.post(`/api/projects/${encodeURIComponent(d.slug)}/fix`, { term: d.term });
+          navigate('/code/' + d.slug);
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      },
+    },
+  });
+}
+
 function onServerEvent(ev) {
   const d = ev.data || {};
   // plugins hear these too (scorpi.on); the rest reach them through the default branch below
@@ -362,6 +385,10 @@ function onServerEvent(ev) {
       break;
     case 'resumed':
       chat.followResumed(d);
+      break;
+    case 'crash':
+      bus.emit('server:crash', d);
+      crashToast(d);
       break;
     case 'agent_job':
       bus.emit('server:agent_job', d);

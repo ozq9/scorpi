@@ -22,7 +22,7 @@ import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import VERSION, agent, agents, attempts, bench, coding, db, discord, events, gallery, github, gitops, knowledge, limits, llm, looks, music, notify, opencode, privacy, scheduler, scores, updates, usage, voice
+from . import VERSION, agent, agents, attempts, bench, coding, crash, db, discord, events, gallery, github, gitops, knowledge, limits, llm, looks, music, notify, opencode, privacy, scheduler, scores, updates, usage, voice
 from .config import DATA_DIR, IS_WINDOWS, PUBLIC_DIR, SETTINGS, UPLOADS, WORKSPACE
 from .mcp import MANAGER, PRESETS
 from .tools import GROUPS, TOOLS, ToolError, catalog, check_access, module_available
@@ -1985,6 +1985,23 @@ def _repo_of(path):
     if not full:
         raise gitops.GitError("This project is not on GitHub yet. Publish it first.")
     return full
+
+
+@_git_route("GET", "/fix-prompt")
+def project_fix_prompt(h, path, folder):
+    """What "Fix it" sends to the agent for a crashed command: the error, the command and what changed recently."""
+    term = gitops.TERMS.get(str(h.query.get("term") or ""))
+    if not term or term.slug != folder:
+        raise ValueError("That command is gone. Run it again to see the error.")
+    text, shown = crash.prompt(term, path, folder)
+    h.send_json({"text": text, "display": shown})
+
+
+@_git_route("POST", "/fix")
+def project_fix(h, path, folder):
+    """Fix it from anywhere (a notification, the phone): the project's agent gets the crash and fixes it."""
+    job = crash.fix(folder, path, str(h.body_json().get("term") or ""))
+    h.send_json({"job_id": job.id, "conv_id": job.conv_id, "run_id": job.run.id if job.run else ""})
 
 
 @_git_route("POST", "/privacy")
