@@ -575,7 +575,7 @@ def settings_set(h):
                     "tts_engine", "tts_voice", "desktop_notifications", "ntfy_topic", "auto_update", "update_url", "github_token", "checkpoints",
                     # a guest must not loosen what agents may do, nor point a provider at a server that would receive the key
                     "autonomy", "cloud_urls", "cloud_accounts", "cloud_extra_models", "code_model", "expert_model", "coder_backend", "hooks", "learn_models",
-                    "auto_resume", "local_fallback", "private_mode", "privacy_trusted", "redact_secrets", "step_routing", "fast_model", "check_packages"):
+                    "auto_resume", "local_fallback", "private_mode", "privacy_trusted", "redact_secrets", "step_routing", "fast_model", "check_packages", "visual_checks"):
             patch.pop(key, None)
         for key in [k for k in patch if k.startswith("key_") or k == "cloud_anon"]:
             patch.pop(key, None)
@@ -1599,6 +1599,18 @@ def limits_get(h):
 def limits_clear(h):
     limits.clear(str(h.body_json().get("key") or ""))
     h.send_json(limits.overview())
+
+
+@route("GET", "/api/visual/([a-z0-9-]+)/([A-Za-z0-9_.-]+\\.png)")
+def visual_image(h, folder, name):
+    """A screenshot from a visual check (scorpi/tools/visual.py): before and after pictures of a project's page."""
+    if not h.is_owner:
+        return h.error("Only the owner of this PC can see project screenshots.", 403)
+    from .tools import visual
+    path = os.path.join(visual.ROOT, folder, name)
+    if not os.path.isfile(path):
+        return h.error("not found", 404)
+    h.send_file(path, cache=True)
 
 
 @route("GET", "/api/scores")
@@ -2777,6 +2789,9 @@ def serve(host="0.0.0.0", port=None, https_port=None, block=True):
             print("  Scorpi is already running on port %d (this start is a duplicate)." % port, flush=True)
             return None
         raise
+    from .tools import visual
+    # visual checks open project pages over http (module scripts and fetch work as on a real server)
+    visual.PREVIEW = lambda slug, rel: "http://127.0.0.1:%d%s%s" % (port, preview_url(slug), urllib.parse.quote(rel))
     scheduler.start()
     discord.start()
     updates.start()

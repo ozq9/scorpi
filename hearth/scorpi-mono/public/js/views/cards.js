@@ -300,10 +300,59 @@ const renderers = {
     );
   },
 
+  // A visual check of a web page (scorpi/tools/visual.py): the page now, the page before the run to compare with a
+  // slider, and what went wrong in the browser.
+  visual(d) {
+    const problems = [...(d.errors || []), ...(d.failed || []).map((f) => 'Failed to load: ' + f), d.overflow ? 'The page scrolls sideways' : ''].filter(Boolean);
+    const [w, hgt] = d.size || [1280, 800];
+    const after = h('img.vc-after', { src: d.after, alt: 'The page now', loading: 'lazy', onclick: () => openViewer([{ url: d.after, name: 'Now', mime: 'image/png' }], 0) });
+    let stage;
+    if (d.before) {
+      const top = h('div.vc-top', h('img', { src: d.before, alt: 'The page before', loading: 'lazy' }));
+      const handle = h('div.vc-handle');
+      const range = h('input.vc-range', { type: 'range', min: 0, max: 100, value: 50, 'aria-label': 'Compare before and after' });
+      const set = (v) => {
+        top.style.clipPath = `inset(0 ${100 - v}% 0 0)`;
+        handle.style.left = v + '%';
+      };
+      range.addEventListener('input', () => set(+range.value));
+      set(50);
+      stage = h('div.vc-stage', { style: { aspectRatio: `${w} / ${hgt}` } }, after, top, handle, range,
+        h('span.vc-tag.l', 'Before'), h('span.vc-tag.r', 'Now'));
+      changedShare(d.before, d.after).then((share) => {
+        if (share !== null) stat.textContent = share < 0.5 ? 'Looks the same as before' : `${share < 10 ? share.toFixed(1) : Math.round(share)}% of the page changed`;
+      });
+    } else {
+      stage = h('div.vc-stage', { style: { aspectRatio: `${w} / ${hgt}` } }, after);
+    }
+    const stat = h('span.muted', d.before ? 'Comparing…' : `${w}×${hgt}`);
+    return h('div.card.visual-card',
+      h('div.vc-head', icon(problems.length ? 'eye' : 'check'), h('b', problems.length ? `${problems.length} problem${problems.length === 1 ? '' : 's'} on the page` : 'The page works'),
+        h('span.vc-target', d.title || d.target || ''), stat),
+      stage,
+      problems.length ? h('ul.vc-problems', problems.slice(0, 8).map((p) => h('li', p))) : null);
+  },
+
   automation(d) {
     return h('div.card.chip-card', icon('routine'), h('span', { style: { flex: 1 } }, h('b', d.name), h('span.muted', ' · ' + d.schedule)), h('a.btn.small', { href: '/routines', 'data-link': '' }, 'Routines'));
   },
 };
+
+// Share of pixels that differ between two screenshots (0-100), measured on small copies; null if it can't be read.
+async function changedShare(a, b) {
+  const load = (src) => new Promise((ok, fail) => { const i = new Image(); i.onload = () => ok(i); i.onerror = fail; i.src = src; });
+  try {
+    const [x, y] = await Promise.all([load(a), load(b)]);
+    const W = 160, H = Math.max(1, Math.round((160 * y.naturalHeight) / Math.max(1, y.naturalWidth)));
+    const pixels = (img) => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.drawImage(img, 0, 0, W, H); return g.getImageData(0, 0, W, H).data; };
+    const p = pixels(x), q = pixels(y);
+    let diff = 0;
+    for (let i = 0; i < p.length; i += 4) if (Math.abs(p[i] - q[i]) + Math.abs(p[i + 1] - q[i + 1]) + Math.abs(p[i + 2] - q[i + 2]) > 48) diff++;
+    return (diff / (W * H)) * 100;
+  } catch {
+    return null;
+  }
+}
 
 export function renderCard(display, ctx) {
   if (!display || !renderers[display.type]) return null;

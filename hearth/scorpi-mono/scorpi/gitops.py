@@ -405,6 +405,34 @@ def _shadow_ready(slug, path):
     return _shadow_args(slug, path)
 
 
+def export_tree(slug, sha, dest):
+    """Write the files of a checkpoint into dest (a fresh folder), leaving the project and its checkpoints untouched
+    (the "before" of a visual check)."""
+    import io
+    import tarfile
+    exe = binary()
+    if not exe or not re.match(r"^[0-9a-f]{7,40}$", sha or ""):
+        raise GitError("Unknown checkpoint.")
+    proc = subprocess.run([exe, "--git-dir=" + _shadow(slug), "archive", "--format=tar", sha], capture_output=True, timeout=120,
+                          creationflags=NO_WINDOW)
+    if proc.returncode != 0:
+        raise GitError(proc.stderr.decode("utf-8", "replace").strip() or "Could not read the checkpoint.")
+    os.makedirs(dest, exist_ok=True)
+    root = os.path.realpath(dest)
+    with tarfile.open(fileobj=io.BytesIO(proc.stdout)) as tar:
+        for member in tar.getmembers():
+            target = os.path.realpath(os.path.join(root, member.name))
+            if not (target == root or target.startswith(root + os.sep)) or member.issym() or member.islnk():
+                continue  # nothing may land outside the folder
+            if member.isdir():
+                os.makedirs(target, exist_ok=True)
+            elif member.isfile():
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with tar.extractfile(member) as src, open(target, "wb") as out:
+                    out.write(src.read())
+    return dest
+
+
 def _too_big(path):
     count = 0
     skip = {d.rstrip("/") for d in IGNORE if d.endswith("/")} | {".git"}

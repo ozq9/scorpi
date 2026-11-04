@@ -698,13 +698,13 @@ a.gh-row:hover, .gh-row a.gh-title:hover { background: var(--fill-1); color: var
 .sb-rank { font: var(--w-semibold) var(--t-sm) var(--font-mono, monospace); color: var(--muted); text-align: center; }
 .sb-name { font-weight: var(--w-semibold); overflow-wrap: anywhere; }
 .sb-chips { display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: var(--s-3); }
-.sb-chip { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-2xs); padding: 2px 8px; border-radius: var(--r-pill); background: var(--glass-1, var(--glass-2)); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.sb-chip { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-2xs); padding: 2px 8px; border-radius: var(--r-pill); background: var(--fill-1); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
 .sb-chip svg { width: 11px; height: 11px; }
-.sb-chip.good { color: var(--ok, var(--text)); border-color: color-mix(in oklab, var(--ok, var(--text)) 35%, var(--line)); }
+.sb-chip.good { color: var(--ok); border-color: color-mix(in oklab, var(--ok) 35%, var(--line)); }
 .sb-chip.bad { color: var(--danger); border-color: color-mix(in oklab, var(--danger) 35%, var(--line)); }
 .sb-score { display: grid; gap: 4px; justify-items: end; font-size: var(--t-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
 .sb-bar { width: 100%; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
-.sb-bar i { display: block; height: 100%; background: var(--text); border-radius: 4px; }
+.sb-bar i { display: block; height: 100%; background: var(--ink); border-radius: 4px; }
 .sb-bench { display: grid; gap: var(--s-4); padding: var(--s-6); border-radius: var(--r-3); border: 1px solid var(--line); background: var(--mat-plate, var(--glass-2)); }
 .sb-bench-head { display: flex; align-items: center; gap: var(--s-4); font-size: var(--t-sm); min-width: 0; }
 .sb-bench-head .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -714,7 +714,7 @@ a.gh-row:hover, .gh-row a.gh-title:hover { background: var(--fill-1); color: var
 .sb-grid th:first-child, .sb-grid td:first-child { text-align: left; white-space: normal; overflow-wrap: anywhere; min-width: 140px; }
 .sb-cell { display: inline-flex; width: 22px; height: 22px; align-items: center; justify-content: center; border-radius: 6px; }
 .sb-cell svg { width: 13px; height: 13px; }
-.sb-cell.pass { background: color-mix(in oklab, var(--ok, #3a3) 22%, transparent); color: var(--ok, var(--text)); }
+.sb-cell.pass { background: color-mix(in oklab, var(--ok) 22%, transparent); color: var(--ok); }
 .sb-cell.fail { background: var(--danger-soft); color: var(--danger); }
 .sb-cell.skip, .sb-cell.wait { color: var(--faint); }
 .sb-pick { display: grid; gap: var(--s-3); margin-top: var(--s-5); max-height: 320px; overflow: auto; }

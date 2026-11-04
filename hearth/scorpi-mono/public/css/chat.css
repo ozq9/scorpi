@@ -679,5 +679,22 @@ body:not(.busy) .composer.voice .send { display: none; }
 .cmd-tag svg { width: 12px; height: 12px; color: var(--muted); }
 
 /* every model was at its usage limit: the chat continues by itself (scorpi/limits.py) */
-.msg .error-note .resume-row { display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap; margin-top: var(--s-4); color: var(--text); font-size: var(--t-sm); }
+.msg .error-note .resume-row { display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap; margin-top: var(--s-4); color: var(--ink); font-size: var(--t-sm); }
 .msg .error-note .resume-row > svg { width: 15px; height: 15px; color: var(--muted); }
+
+/* visual check: the page now and before, with a slider (scorpi/tools/visual.py) */
+.visual-card { padding: var(--s-6); display: grid; gap: var(--s-5); max-width: 760px; }
+.visual-card .vc-head { display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap; font-size: var(--t-sm); min-width: 0; }
+.visual-card .vc-head svg { width: 16px; height: 16px; }
+.visual-card .vc-target { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 120px; min-width: 0; }
+.vc-stage { position: relative; width: 100%; border-radius: var(--r-3); overflow: hidden; border: 1px solid var(--line); background: var(--fill-2); }
+.vc-stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top left; display: block; }
+.vc-stage .vc-after { cursor: zoom-in; }
+.vc-top { position: absolute; inset: 0; pointer-events: none; }
+.vc-handle { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--ink); box-shadow: 0 0 0 1px var(--bg); pointer-events: none; }
+.vc-handle::after { content: ''; position: absolute; top: 50%; left: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: var(--bg); border: 2px solid var(--ink); }
+.vc-range { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: ew-resize; margin: 0; }
+.vc-tag { position: absolute; top: 8px; font: 500 10.5px/1 var(--font-mono); padding: 4px 6px; border-radius: var(--r-2); background: color-mix(in oklab, var(--bg) 82%, transparent); color: var(--ink); pointer-events: none; }
+.vc-tag.l { left: 8px; }
+.vc-tag.r { right: 8px; }
+.vc-problems { margin: 0; padding-left: 18px; font-size: var(--t-sm); color: var(--danger); display: grid; gap: 2px; overflow-wrap: anywhere; }

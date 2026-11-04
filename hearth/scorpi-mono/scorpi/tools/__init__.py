@@ -234,7 +234,7 @@ def check_access(path):
 
 
 def load_all():
-    from . import agenda, canvas, code, computer, core, data, dev, docs, files, looks, media, places, radio, records, repo, system, web  # noqa: F401
+    from . import agenda, canvas, code, computer, core, data, dev, docs, files, looks, media, places, radio, records, repo, system, visual, web  # noqa: F401
     from .. import knowledge, agents_tools  # noqa: F401
 
 

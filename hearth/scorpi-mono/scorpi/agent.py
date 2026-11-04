@@ -6,6 +6,7 @@ import json
 import mimetypes
 import os
 import platform
+import re
 import socket
 import threading
 import time
@@ -99,6 +100,7 @@ PLAN_MODE = """PLAN MODE — the user wants to review a plan before anything cha
 1. Look around with the read-only tools (repo_map, grep, glob, read_file, git_read, web search...) until you understand the request and the code it touches. Tools that change files or run commands are not available in this mode.
 2. Call submit_plan with a concrete plan in Markdown: the goal in one line; what you found; numbered steps naming the files to add or change and how; how you will test it; open questions and risks. Keep it skimmable.
 3. If the user asks for changes, revise the plan and call submit_plan again. Once it is approved, stop: the building starts right after."""
+UI_FILE = re.compile(r"\.(html?|css|scss|sass|less|jsx?|tsx?|mjs|vue|svelte|astro)$", re.I)
 PLAN_TOOLS = {"submit_plan", "update_plan", "ask_expert", "enable_tools", "recall", "current_time", "calculate"}
 
 COMPUTER_GUIDE = """Operating the PC's GUI:
@@ -170,6 +172,8 @@ class Agent:
         self.approved_tests = None  # set when the user approves them
         self.contract = C.Contract.from_dict(contract, self.workdir) if contract and self.workdir else None  # approved tests to make pass
         self.contract_passed = False
+        self.ui_dirty = False  # web files changed since the page was last looked at (visual check at the end)
+        self.visual_rounds = 0
         self.current = self.model  # the model answering right now (after switches): its tool calls count for it (scores.py)
         self.text_tools = False  # the model cannot call tools natively: it uses the text tool format (toolcalls.py)
         self.guard = LoopGuard()  # notices when the work goes in circles (guard.py)
@@ -395,7 +399,7 @@ class Agent:
                     continue  # the user wrote while this answer streamed: carry on with their message
                 feedback = ""
                 if step < max_steps - 1 and not self.cancelled() and not self.plan_mode and not self.tests_mode:
-                    feedback = self._contract_check() or self._turn_hooks()
+                    feedback = self._contract_check() or self._visual_finish() or self._turn_hooks()
                 if feedback:
                     messages.append({"role": "assistant", "content": text or ""})
                     messages.append({"role": "user", "content": feedback})
@@ -443,6 +447,10 @@ class Agent:
     def _watch(self, call, result):
         """After a tool call: count trouble (failing tests and checks) and look for loops. Returns guard.py's verdict."""
         name, text = call["name"], result.text or ""
+        if name in C.EDIT_TOOLS and result.ok and any(UI_FILE.search(t) for t in C.targets(name, call.get("arguments") or {}, self.workdir or ".")):
+            self.ui_dirty = True
+        elif name == "visual_check":
+            self.ui_dirty = False
         if self.contract and name in ("run_shell", "run_python", "run_javascript", "manage_path"):
             undone = self.contract.tampered()
             if undone:
@@ -707,6 +715,24 @@ class Agent:
             return ""
         self.emit({"type": "notice", "text": "A hook stopped a command: %s" % hooks.label(failed[0])})
         return "A hook of the user's stopped this command:\n%s\nDo it differently, or tell the user why it is needed." % hooks.summary(failed)
+
+    def _visual_finish(self):
+        """Before finishing work that changed a web page: open it, and send the agent back once if it shows errors."""
+        if (not self.ui_dirty or self.depth or not self.workdir or not SETTINGS.get("visual_checks", True) or self.visual_rounds >= 2
+                or getattr(self.run, "unattended", False)):
+            return ""
+        self.ui_dirty = False
+        from .tools import visual
+        try:
+            with base_dir(self.workdir):
+                visual.resolve_target(slug=self.project)
+        except ToolError:
+            return ""  # no page to look at (no index.html, no dev server)
+        self.visual_rounds += 1
+        result = self.execute({"id": "auto-visual", "name": "visual_check", "arguments": {}})
+        if result.ok or (result.text or "").startswith("Error:"):
+            return ""  # fine, or no browser on this PC: nothing for the agent to fix
+        return "[Scorpi opened the page before you finish, and it has problems]\n%s\nFix them, then finish." % (result.text or "")[:3000]
 
     def _contract_check(self):
         """Before finishing with approved tests: they must pass. Returns a message sending the agent back, or ""."""
