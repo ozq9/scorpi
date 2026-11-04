@@ -453,7 +453,7 @@ class Turn(events.Run):
         self.prompt = prompt
         self.session = session
         self.on_session = on_session
-        self.model_ref = agent.get("model") or SETTINGS["code_model"] or SETTINGS["model"] or ""
+        self.model_ref = agent.get("model") or llm.coding_model() or SETTINGS["model"] or ""
         self.user_mid = db.add_message(conv_id, "user", prompt, {"attachments": [], "skill": "code"})
         self.assistant_mid = db.new_id()
         self.parts, self.files, self.texts = [], [], []

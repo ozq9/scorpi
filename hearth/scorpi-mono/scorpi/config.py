@@ -7,7 +7,7 @@ import platform
 import secrets
 import threading
 
-from .providers import PROVIDERS, key_setting
+from .providers import PROVIDERS, RETIRED, key_setting
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PUBLIC_DIR = os.path.join(APP_DIR, "public")
@@ -22,7 +22,8 @@ for _path in (DATA_DIR, WORKSPACE, UPLOADS):
     os.makedirs(_path, exist_ok=True)
 
 # Keys whose values never leave the server.
-SECRET_KEYS = {"openai_key", "fish_api_key", "secret", "pin", "ha_token", "github_token"} | {key_setting(p["id"]) for p in PROVIDERS}
+SECRET_KEYS = {"openai_key", "fish_api_key", "secret", "pin", "ha_token", "github_token"} | {key_setting(p["id"]) for p in PROVIDERS} \
+    | {key_setting(pid) for pid in RETIRED}
 
 DEFAULTS = {
     # language model
@@ -43,7 +44,8 @@ DEFAULTS = {
     "cloud_fallback": True,  # switch to another model when one is rate-limited or offline
     "cloud_urls": {},  # provider id -> base URL override
     "cloud_extra_models": {},  # provider id -> "model-a, model-b" offered in addition to the live list
-    "code_model": "",  # model for the Code skill and coder sub-agents ("" = the chat model)
+    "cloud_accounts": {},  # provider id -> account id its URLs need (Cloudflare)
+    "code_model": "",  # model for the Code skill and coder sub-agents ("" = the chat model, "auto" = the best coder on offer)
     "coder_backend": "auto",  # auto (OpenCode when installed) | scorpi (Scorpi's own tools)
     "checkpoints": True,  # save a project's files before and after every agent run (scorpi/gitops.py), to look at or undo
     "github_token": "",  # the GitHub account the Code area and the coder use (scorpi/github.py)
@@ -128,6 +130,9 @@ class Settings:
             if value is not None:
                 self.data[key] = value
         changed = False
+        for pid in RETIRED:  # keys of services that shut down are of no use any more
+            if self.data.pop(key_setting(pid), None) is not None:
+                changed = True
         if "stt_mode" not in stored and stored.get("stt_engine") == "browser":
             self.data["stt_mode"] = "device"
         self.data.pop("stt_engine", None)

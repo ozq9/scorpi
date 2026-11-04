@@ -131,7 +131,7 @@ class Agent:
         self.run = run
         # coding work (the Code skill, coder sub-agents) can run on its own model, e.g. an OpenCode Go plan;
         # a dedicated agent's own model (pin_model) wins over both
-        coder = SETTINGS["code_model"] if skill == "code" else ""
+        coder = llm.coding_model() if skill == "code" else ""
         self.model = pin_model or coder or model or llm.default_model()
         self.persona = persona  # {"name", "instructions", "workdir"} for a dedicated agent working in the background
         self.max_steps = max_steps

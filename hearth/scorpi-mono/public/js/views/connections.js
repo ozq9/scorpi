@@ -55,6 +55,8 @@ async function model(body) {
   const list = h('div.panel');
   const cloudBox = h('div.cards-grid');
   const codingBox = h('div.cards-grid');
+  const creditsBox = h('div.cards-grid');
+  const boxFor = (p) => (p.category === 'coding' ? codingBox : p.category === 'credits' ? creditsBox : cloudBox);
   const pullName = h('input.input', { placeholder: 'e.g. qwen3:8b, llama3.1:8b, qwen2.5vl:7b, nomic-embed-text' });
   const progress = h('div.muted', { style: { fontSize: '12.5px', fontFamily: 'var(--font-mono)', marginTop: '8px' } });
   const ollamaUrl = h('input.input', { value: s.ollama_url || '' });
@@ -83,7 +85,7 @@ async function model(body) {
         'div.panel.panel-pad',
         { style: { marginBottom: '14px' } },
         toggleRow('Switch models automatically', 'When a model is rate-limited, out of quota, removed or offline (or Ollama is not running), continue with the next available one.', s.cloud_fallback, 'cloud_fallback'),
-        toggleRow('Pollinations without a key', 'Last-resort model that needs no signup at all. Slow: about one request every 30 seconds.', s.cloud_anon, 'cloud_anon'),
+        toggleRow('Models without a key', 'Last-resort models that need no signup at all (Pollinations, OVHcloud, LLM7). Slow, but they always answer.', s.cloud_anon, 'cloud_anon'),
       ),
       codingBox,
     ),
@@ -92,6 +94,12 @@ async function model(body) {
       h('h3.section-title', 'Free cloud models', h('span.rule')),
       h('p.section-desc', 'Run Scorpi fully without local models. Each service below gives a free API key: paste it and its models (including vision models) appear in every model picker. Keys stay on this PC. Messages go to the service you pick.'),
       cloudBox,
+    ),
+    h(
+      'div.section',
+      h('h3.section-title', 'Free credits', h('span.rule')),
+      h('p.section-desc', 'These services give free credit when you sign up. Good for trying strong models at no cost; when the credit runs out Scorpi moves on to the next model.'),
+      creditsBox,
     ),
     h(
       'div.section',
@@ -119,7 +127,7 @@ async function model(body) {
   }
 
   async function loadCloud(force) {
-    for (const box of [codingBox, cloudBox]) {
+    for (const box of [codingBox, cloudBox, creditsBox]) {
       clear(box);
       box.appendChild(h('div.muted', 'Checking providers…'));
     }
@@ -127,20 +135,20 @@ async function model(body) {
     try {
       data = await api.get('/api/cloud' + (force ? '?refresh=1' : ''));
     } catch (err) {
-      clear(codingBox);
-      clear(cloudBox);
+      [codingBox, cloudBox, creditsBox].forEach(clear);
       cloudBox.appendChild(h('div.muted', err.message));
       return;
     }
-    clear(codingBox);
-    clear(cloudBox);
-    data.providers.forEach((p, i) => (p.category === 'coding' ? codingBox : cloudBox).appendChild(providerTile(p, i)));
+    [codingBox, cloudBox, creditsBox].forEach(clear);
+    data.providers.forEach((p, i) => boxFor(p).appendChild(providerTile(p, i)));
   }
 
   function providerTile(p, i) {
     const keyName = 'key_' + p.id;
     const coding = p.category === 'coding';
-    const key = h('input.input', { type: 'password', value: state.settings[keyName] || '', placeholder: p.keyless ? 'Optional free key' : coding ? 'Paste API key' : 'Paste free API key', autocomplete: 'off' });
+    const credits = p.category === 'credits';
+    const key = h('input.input', { type: 'password', value: state.settings[keyName] || '', placeholder: p.keyless ? 'Optional free key' : coding || credits ? 'Paste API key' : 'Paste free API key', autocomplete: 'off' });
+    const account = p.account ? h('input.input', { value: (state.settings.cloud_accounts || {})[p.id] || '', placeholder: p.account, autocomplete: 'off' }) : null;
     const url = h('input.input', { value: (state.settings.cloud_urls || {})[p.id] || '', placeholder: p.default_url });
     const extra = h('input.input', { value: p.extra || '', placeholder: 'e.g. glm-5.2, kimi-k2.6' });
     const saveAdvanced = async () => {
@@ -154,22 +162,26 @@ async function model(body) {
       ? h('span.badge.err', 'error')
       : p.enabled
         ? h('span.badge.ok', p.models.length + ' model' + (p.models.length === 1 ? '' : 's'))
-        : h('span.badge', p.keyless ? 'off' : 'add key');
+        : h('span.badge', p.keyless ? 'off' : p.account && !p.account_set ? 'add ' + p.account.toLowerCase() : 'add key');
     const picks = p.models.filter((m) => m.recommended.length);
     const saveKey = async (value) => {
-      await saveSettings({ [keyName]: value }, value ? p.name + ' connected' : p.name + ' key removed');
+      const patch = { [keyName]: value };
+      if (account) patch.cloud_accounts = { ...(state.settings.cloud_accounts || {}), [p.id]: value ? account.value.trim() : '' };
+      if (account && value && !account.value.trim()) return toast('Add your ' + p.account + ' too.', 'error');
+      await saveSettings(patch, value ? p.name + ' connected' : p.name + ' key removed');
       refreshAll();
     };
+    const recommendedLabel = { chat: 'best chat', vision: 'best vision', code: 'best code' };
     return h(
       'div.tile',
       { style: { animationDelay: i * 30 + 'ms' } },
-      h('div.t-kicker', icon(coding ? 'code' : 'globe'), p.keyless ? 'no signup needed' : coding ? 'plan / API key' : 'free key'),
+      h('div.t-kicker', icon(coding ? 'code' : credits ? 'spark' : 'globe'), p.keyless ? 'no signup needed' : coding ? 'plan / API key' : credits ? 'free credit' : 'free key'),
       h('div.t-name', p.name),
       h('div.row', { style: { gap: '6px', flexWrap: 'wrap', margin: '2px 0 8px' } }, badge, p.stt ? h('span.badge', 'speech to text') : null),
       h('div.t-desc', p.about),
       p.error ? h('div.hint', { style: { color: 'var(--danger)', fontSize: '12px', marginTop: '8px', wordBreak: 'break-word' } }, p.error) : null,
       picks.length
-        ? h('div', { style: { marginTop: '12px', display: 'grid', gap: '8px' } }, picks.map((m) => h('div', { style: { fontSize: '12.5px', minWidth: 0 } }, h('div.mono', { style: { wordBreak: 'break-all' } }, m.id), h('div.row', { style: { gap: '4px', marginTop: '3px' } }, m.recommended.map((r) => h('span.badge' + (r === 'vision' ? '' : '.ok'), r === 'chat' ? 'best chat' : 'best vision'))))))
+        ? h('div', { style: { marginTop: '12px', display: 'grid', gap: '8px' } }, picks.map((m) => h('div', { style: { fontSize: '12.5px', minWidth: 0 } }, h('div.mono', { style: { wordBreak: 'break-all' } }, m.id), h('div.row', { style: { gap: '4px', marginTop: '3px' } }, m.recommended.map((r) => h('span.badge' + (r === 'vision' ? '' : '.ok'), recommendedLabel[r] || r))))))
         : null,
       p.models.length > picks.length
         ? h(
@@ -183,10 +195,11 @@ async function model(body) {
             ),
           )
         : null,
-      h('form.row', { style: { marginTop: '12px' }, onsubmit: (e) => { e.preventDefault(); saveKey(key.value.trim()); } }, h('div.grow', key), h('button.btn.small.primary', { type: 'submit' }, 'Save')),
+      account ? h('div', { style: { marginTop: '12px' } }, account) : null,
+      h('form.row', { style: { marginTop: account ? '8px' : '12px' }, onsubmit: (e) => { e.preventDefault(); saveKey(key.value.trim()); } }, h('div.grow', key), h('button.btn.small.primary', { type: 'submit' }, 'Save')),
       h(
         'div.t-foot',
-        h('a.btn.small.quiet', { href: p.signup, target: '_blank', rel: 'noopener noreferrer' }, icon('external'), coding ? 'Get a key' : 'Get a free key'),
+        h('a.btn.small.quiet', { href: p.signup, target: '_blank', rel: 'noopener noreferrer' }, icon('external'), coding || credits ? 'Get a key' : 'Get a free key'),
         p.has_key ? h('button.btn.small.quiet', { type: 'button', onclick: () => saveKey('') }, icon('trash'), 'Remove key') : null,
       ),
       p.keyless && !p.has_key
@@ -225,6 +238,7 @@ async function model(body) {
     const names = models.map((m) => m.name);
     const chat = names.filter((n) => !/embed/i.test(n));
     const cloudChat = cloud.map((m) => [m.name, cloudLabel(m) + (m.recommended.includes('chat') ? ' ★' : '')]);
+    const cloudCode = cloud.map((m) => [m.name, cloudLabel(m) + (m.recommended.includes('code') ? ' ★' : '')]);
     const cloudVision = cloud.filter((m) => m.caps.includes('vision')).map((m) => [m.name, cloudLabel(m) + (m.recommended.includes('vision') ? ' ★' : '')]);
     const embedCloud = [];
     try {
@@ -239,7 +253,7 @@ async function model(body) {
       h(
         'div.grid-2',
         field('Chat model', selectEl(withCurrent([['', 'Automatic (best available)'], ...chat.map((n) => [n, n]), ...cloudChat], s.model), s.model, (v) => saveSettings({ model: v })), '★ = recommended for that service.'),
-        field('Coding model', selectEl(withCurrent([['', 'Same as the chat model'], ...chat.map((n) => [n, n]), ...cloudChat], s.code_model), s.code_model, (v) => saveSettings({ code_model: v })), 'Used by the Code skill and coder sub-agents. Any API model works, e.g. OpenCode Go, NVIDIA or OpenRouter.'),
+        field('Coding model', selectEl(withCurrent([['', 'Same as the chat model'], ['auto', 'Automatic (best coder on offer)'], ...chat.map((n) => [n, n]), ...cloudCode], s.code_model), s.code_model, (v) => saveSettings({ code_model: v })), 'Used by the Code skill, the Coder and its helpers. Automatic picks the strongest coding model of the services you added (★).'),
         field('Coding engine', selectEl([['auto', 'Full (recommended)'], ['scorpi', 'Basic']], s.coder_backend || 'auto', (v) => saveSettings({ coder_backend: v })), s.code_engine ? 'The Coder edits precisely, searches and checks code, and runs on your coding plan or any API key added here.' : 'Basic tools for now. For the full engine install the free OpenCode CLI: npm i -g @opencode/cli'),
         field('Vision model', selectEl(withCurrent([['', 'Automatic (any vision model)'], ...chat.map((n) => [n, n]), ...cloudVision], s.vision_model), s.vision_model, (v) => saveSettings({ vision_model: v })), 'Looks at images and screenshots when the chat model is text-only.'),
         field('Embedding model', selectEl(embedOpts.length ? embedOpts : [[s.embed_model, s.embed_model]], s.embed_model, (v) => saveSettings({ embed_model: v })), 'For knowledge search (RAG). Re-add documents after changing it.'),

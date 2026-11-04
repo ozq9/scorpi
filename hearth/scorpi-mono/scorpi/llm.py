@@ -11,6 +11,7 @@ import re
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -42,7 +43,7 @@ VISION_HINT = re.compile(
     r"qwen.*vl|minicpm-v",
     re.I,
 )
-RETRYABLE = (401, 402, 403, 404, 408, 409, 413, 429, 500, 502, 503, 504, 529)
+RETRYABLE = (401, 402, 403, 404, 408, 409, 410, 413, 429, 500, 502, 503, 504, 529)
 
 
 class LLMError(Exception):
@@ -77,10 +78,16 @@ def _cloud_key(pid):
     return SETTINGS[P.key_setting(pid)] or ""
 
 
+def _cloud_account(pid):
+    return str((SETTINGS["cloud_accounts"] or {}).get(pid) or "").strip()
+
+
 def cloud_enabled(pid):
     prov = P.BY_ID.get(pid)
     if not prov:
         return False
+    if prov.get("account") and not _cloud_account(pid):
+        return False  # its URLs need the account id (Cloudflare)
     return bool(_cloud_key(pid)) or bool(prov.get("keyless") and SETTINGS["cloud_anon"])
 
 
@@ -104,7 +111,11 @@ def _variants(pid):
     if prov.get("keyless") and not _cloud_key(pid):
         return [{"url": prov["anon_url"], "models_url": prov["anon_models_url"]}]
     first = {k: prov[k] for k in ("url", "messages_url", "models_url") if prov.get(k)}
-    return [first] + list(prov.get("variants") or [])
+    options = [first] + list(prov.get("variants") or [])
+    account = _cloud_account(pid)
+    if prov.get("account"):
+        options = [{k: v.replace("{account}", urllib.parse.quote(account, safe="")) for k, v in o.items()} for o in options]
+    return options
 
 
 def _variant(pid):
@@ -170,6 +181,9 @@ def _endpoint(model, protocol=None, messages=None):
     if is_cloud(model):
         pid, mid = split_cloud(model)
         prov = P.BY_ID.get(pid)
+        if not prov and pid in P.RETIRED:
+            # 410 Gone: chat_stream switches to another available model and says why
+            raise LLMError("%s." % P.RETIRED[pid]["why"], status=410)
         if not prov:
             raise LLMError("Unknown model provider %r." % pid)
         if not cloud_enabled(pid):
@@ -209,6 +223,13 @@ def _entry_caps(entry, mid):
             tools = any("tool" in x or "function" in x for x in low)
             if "vision" in low:
                 vision = True
+        props = entry.get("properties")
+        if isinstance(props, list) and props and isinstance(entry.get("task"), dict):
+            # Cloudflare's catalog: [{"property_id": "function_calling", "value": "true"}, ...]
+            flags = {str(x.get("property_id")): str(x.get("value")).lower() for x in props if isinstance(x, dict)}
+            tools = flags.get("function_calling") == "true"
+            if flags.get("vision") == "true":
+                vision = True
         if isinstance(entry.get("tools"), bool):
             tools = entry["tools"]
         if isinstance(entry.get("vision"), bool):
@@ -242,7 +263,7 @@ def _fetch_cloud(pid):
             error = LLMError(str(getattr(exc, "reason", exc)), unreachable=True)
             continue
         _active_variant[pid] = index
-        entries = data.get("data", data.get("models", [])) if isinstance(data, dict) else data
+        entries = (data.get("data") or data.get("models") or data.get("result") or []) if isinstance(data, dict) else data
         break
     extra = [m.strip() for m in re.split(r"[,\s]+", (SETTINGS["cloud_extra_models"] or {}).get(pid, "")) if m.strip()]
     if entries is None:
@@ -253,7 +274,12 @@ def _fetch_cloud(pid):
     skip = re.compile(prov["skip"], re.I) if prov.get("skip") else None
     out, seen = [], set()
     for entry in list(entries or []) + extra:
-        mid = entry if isinstance(entry, str) else (entry.get("id") or entry.get("name") or "")
+        if isinstance(entry, str):
+            mid = entry
+        elif isinstance(entry.get("task"), dict):
+            mid = entry.get("name") or ""  # Cloudflare: "id" is an internal uuid, "name" is the model ("@cf/...")
+        else:
+            mid = entry.get("id") or entry.get("name") or ""
         mid = str(mid)
         if mid.startswith("models/"):
             mid = mid[7:]
@@ -291,7 +317,8 @@ def cloud_models(pid, refresh=False):
         models, error = [], getattr(exc, "reason", None) and str(exc.reason) or str(exc)
     prov = P.BY_ID[pid]
     picks = {}
-    for kind, need, pats in (("chat", {"tools"}, prov["prefer"]), ("vision", {"vision"}, prov.get("prefer_vision") or [])):
+    for kind, need, pats in (("chat", {"tools"}, prov["prefer"]), ("vision", {"vision"}, prov.get("prefer_vision") or []),
+                             ("code", {"tools"}, prov.get("prefer_code") or [])):
         pick = _prefer([m for m in models if need <= set(m["caps"])], pats)
         if pick:
             picks.setdefault(pick["id"], []).append(kind)
@@ -328,6 +355,7 @@ def cloud_overview(refresh=False):
             "keyless": bool(prov.get("keyless")), "has_key": bool(_cloud_key(prov["id"])), "enabled": prov["id"] in enabled,
             "stt": bool(prov.get("stt")), "embed": prov.get("embed", ""), "error": error, "category": prov.get("category", "free"),
             "url": _variant(prov["id"])["url"] if prov["id"] in enabled else prov.get("url", ""), "default_url": prov.get("url", ""),
+            "account": prov.get("account", ""), "account_set": bool(_cloud_account(prov["id"])),
             "extra": (SETTINGS["cloud_extra_models"] or {}).get(prov["id"], ""),
             "models": [dict(m, name=cloud_ref(prov["id"], m["id"])) for m in models],
         })
@@ -349,6 +377,31 @@ def pick_model(need=(), exclude_providers=(), exclude=()):
         if pick:
             return cloud_ref(pid, pick["id"])
     return ""
+
+
+def pick_code_model(exclude=()):
+    """The strongest coding model on offer: each provider's coding pick, in the order the user set providers up.
+    Used when the coding model is "auto" (paid plans come first, then free tiers, then free credits)."""
+    now = time.time()
+    for pid in cloud_order():
+        if _slow.get(pid, 0) > now:
+            continue
+        prov = P.BY_ID[pid]
+        models, _ = cloud_models(pid)
+        eligible = [m for m in models if "tools" in m["caps"] and cloud_ref(pid, m["id"]) not in exclude
+                    and _slow_models.get(cloud_ref(pid, m["id"]), 0) <= now]
+        pick = _prefer(eligible, prov.get("prefer_code") or prov["prefer"])
+        if pick:
+            return cloud_ref(pid, pick["id"])
+    return ""
+
+
+def coding_model():
+    """The model for coding work: the "Coding model" setting, the best coder on offer for "auto", or "" (the chat model)."""
+    chosen = SETTINGS["code_model"] or ""
+    if chosen == "auto":
+        return pick_code_model() or ""
+    return chosen
 
 
 def pick_same_provider(model, need=(), exclude=()):
@@ -676,8 +729,14 @@ def _route_stream(model, messages, tools, options, cancelled):
 def _label(model):
     if is_cloud(model):
         pid, mid = split_cloud(model)
-        return "%s · %s" % (P.BY_ID[pid]["name"] if pid in P.BY_ID else pid, mid)
+        name = (P.BY_ID.get(pid) or P.RETIRED.get(pid) or {}).get("name") or pid
+        return "%s · %s" % (name, mid)
     return model
+
+
+def label(model):
+    """How a model is shown to people: "Groq · llama-3.3-70b", or the local name."""
+    return _label(model)
 
 
 def _short(exc):

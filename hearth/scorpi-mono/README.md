@@ -4,7 +4,9 @@ A calm, local-first AI workspace that runs on your own Windows PC and is reachab
 network or Tailscale. It opens as its own app window on the PC and installs as an app on phones.
 
 Everything can be free: models run locally in [Ollama](https://ollama.com) **or** on free cloud tiers (Groq, Google
-Gemini, OpenRouter, GitHub Models, Mistral, Cerebras, NVIDIA, Hugging Face, Z.ai, Cohere, SambaNova, Pollinations),
+Gemini, OpenRouter, Ollama Cloud, Cloudflare Workers AI, Vercel AI Gateway, Mistral, Cerebras, NVIDIA, Hugging Face,
+Z.ai, Cohere, SambaNova, SiliconFlow, and Pollinations, OVHcloud and LLM7 with no signup at all) or on the free signup
+credit of Nebius, Together, Fireworks, DeepInfra, Novita, Hyperbolic and Scaleway,
 voices use free Microsoft neural voices, speech recognition uses each device's own recognizer (or Whisper), and
 maps, weather, search and images use free public services. Coding plans such as OpenCode Go and your own API keys
 (OpenAI, Anthropic, DeepSeek...) work too.
@@ -50,6 +52,16 @@ automatically; the best chat and vision model of each is marked ★. Models from
 e.g. a Groq chat model with a Gemini vision model. When a free model is rate-limited, removed or offline (or Ollama
 is not running), Scorpi switches to the next available one and says so (*Switch models automatically*).
 Keys are stored only in `ai/data/settings.json` on the host; messages go to the provider you chose.
+
+- **Three kinds of services** in *Connect → Model*: *Coding plans & API keys*, *Free cloud models* (lasting free tiers)
+  and *Free credits* (credit when you sign up; when it runs out, Scorpi moves on to the next model).
+- **No signup at all:** Pollinations, OVHcloud AI Endpoints and LLM7 answer without a key (slowly); *Models without a
+  key* turns them on or off. A free key from each lifts the limits.
+- **Cloudflare Workers AI** needs your Account ID next to the API token (its URLs contain it).
+- **Coding model → Automatic (best coder on offer)** picks each service's strongest coding model (Qwen3 Coder, Kimi K2,
+  Devstral, GLM...) in the order you added the services, marked ★ *best code*.
+- **Retired services** (GitHub Models, retired by GitHub on 30 July 2026): a chat still set to one switches to an
+  available model and says why; the stored key is removed.
 
 Images pick their model automatically too: when a screenshot, web page or picture reaches a text-only chat model,
 a vision model that can use tools takes over the turn (the *Vision model* setting first, then local, then cloud).

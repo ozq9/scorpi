@@ -235,7 +235,7 @@ class Job:
         """The model this job runs on, as the user would see it."""
         a = self.agent
         coding = a.get("skill") == "code"
-        return self.model or a.get("model") or (SETTINGS["code_model"] if coding else "") or SETTINGS["model"] or ""
+        return self.model or a.get("model") or (llm.coding_model() if coding else "") or SETTINGS["model"] or ""
 
     def set_model(self, ref):
         """Switch the job to another model: at once for a running job (from its next step), else for its next run."""
