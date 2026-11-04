@@ -278,7 +278,7 @@ class Job:
         if house:
             instructions += "\n\nThis project's own instructions (%s), follow them:\n%s" % house
         return {"persona": {"name": a["name"], "instructions": instructions, "workdir": self.workdir, "project": self.project,
-                            "private": privacy.project_private(self.project or self.attempt_of)},
+                            "private": privacy.project_private(self.project or self.attempt_of), "checkpoint": self.checkpoint},
                 "max_steps": int(a.get("max_steps") or 40), "auto_approve": bool(a.get("auto_approve")),
                 "pin_model": self.model or a.get("model") or ""}
 

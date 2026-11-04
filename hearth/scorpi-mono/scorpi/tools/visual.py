@@ -217,19 +217,21 @@ def _remember(folder, entry):
             json.dump(keep, fh, indent=1)
 
 
-def _before(folder, target, run_id, slug, rel, root, width, height):
+def _before(folder, page, run_id, slug, rel, root, width, height, checkpoint="", since=0):
     """The page before this run: the last screenshot from an earlier run, else the page rendered from the checkpoint
     taken before the run (a static page only)."""
-    earlier = [e for e in _history(folder) if e.get("target") == target and e.get("run") != run_id and e.get("size") == [width, height]]
+    earlier = [e for e in _history(folder) if e.get("page", e.get("target")) == page and e.get("run") != run_id and e.get("size") == [width, height]]
     if earlier:
         return earlier[-1]["file"]
     if not (slug and rel and root):
         return ""
     from .. import gitops
-    try:
-        base = next((c for c in gitops.checkpoints(slug, root) if c["subject"].startswith("Before")), None)
-    except Exception:  # noqa: BLE001 - no checkpoints (git missing): no before picture
-        base = None
+    base = {"sha": checkpoint} if checkpoint else None
+    if not base:
+        try:  # the newest checkpoint from before this run started
+            base = next((c for c in gitops.checkpoints(slug, root) if not since or c["time"] <= since + 1), None)
+        except Exception:  # noqa: BLE001 - no checkpoints (git missing): no before picture
+            base = None
     if not base:
         return ""
     copy = tempfile.mkdtemp(prefix="scorpi-before-")
@@ -262,9 +264,11 @@ def check(ctx, url="", path="", width=1280, height=800):
     os.makedirs(folder, exist_ok=True)
     name = "%s-%dx%d.png" % (time.strftime("%Y%m%d-%H%M%S"), width, height)
     root = project_dir() or work_dir()
-    before = _before(folder, target, run_id, slug, rel, root, width, height)
+    page = rel.replace(os.sep, "/") if rel else target  # the same page, whether opened as a file or over the preview server
+    before = _before(folder, page, run_id, slug, rel, root, width, height, getattr(agent, "checkpoint", "") or "",
+                     getattr(agent, "started", 0) or 0)
     facts = capture(target, os.path.join(folder, name), width, height)
-    _remember(folder, {"file": name, "target": target, "run": run_id, "time": time.time(), "size": [width, height]})
+    _remember(folder, {"file": name, "target": target, "page": page, "run": run_id, "time": time.time(), "size": [width, height]})
     problems = facts["errors"] + [c for c in facts["console"] if c.startswith("error")] + facts["failed"]
     lines = ["Looked at %s (%dx%d, %s)%s." % (label, width, height, facts["engine"], (": " + facts["title"]) if facts.get("title") else "")]
     if facts["errors"]:

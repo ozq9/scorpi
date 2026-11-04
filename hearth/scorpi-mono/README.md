@@ -63,6 +63,35 @@ Keys are stored only in `ai/data/settings.json` on the host; messages go to the 
 - **Retired services** (GitHub Models, retired by GitHub on 30 July 2026): a chat still set to one switches to an
   available model and says why; the stored key is removed.
 
+### Never stopped by a usage limit
+
+Scorpi remembers each model's limits: the rate-limit headers of every answer (requests left, when they reset), the wait
+a refusal names ("try again in 7m12s"), daily quotas (reset at midnight UTC, Gemini at midnight US Pacific time) and
+free credits that ran out. A model at its limit *rests* until it resets, and every automatic pick skips it, so work moves
+to another provider at once; with Ollama installed it can also go on locally (*Use a local model when the cloud runs
+out*). When every model is resting, a job pauses (*paused · continues at 01:00*), a chat says when it carries on, and
+both continue by themselves at the first reset, also after a restart (*Continue by itself after usage limits*).
+Provider tiles and *Usage → Models → Free limits* show what rests until when and how many requests are left.
+
+### Which free model works best for you
+
+Every tool call, syntax check, test run, finished or failed job, undone run and parallel attempt counts for the model
+that did it (`scorpi/scores.py`). *Usage → Models* ranks your models by those results, and the automatic coding model
+puts proven ones first among free tiers (paid plans stay first; switch it off with *Let results steer the automatic
+coding model*). **Test my free models** gives each model five small real tasks (fix a bug, follow a spec, change several
+files, parse text, extend a command-line tool) in a folder of its own; hidden tests decide pass or fail.
+
+### What each provider does with your data
+
+Each tile says what the provider states in its terms (checked November 2026): *No training* (Groq, Cloudflare,
+OVHcloud, Ollama Cloud, DeepInfra, Fireworks, OpenAI and Anthropic APIs), *Keeps nothing* (Cerebras), *May train on
+prompts* (Gemini's free tier outside the EEA/UK/Switzerland, Mistral's free plan, NVIDIA's trial, DeepSeek) or *Depends on
+model* (OpenRouter). **Private mode**, or a single project made private (its *⋯* menu), only uses providers marked
+*No training* or *Keeps nothing*, plus local models and any you allow yourself (e.g. after opting out of training in
+your account there); its attempts, helpers, reviews and reports follow it. **Keep secrets out of requests** (on by
+default) replaces API keys, tokens, private keys and `.env` passwords with placeholders like `__SECRET_1a2b3c4d__`
+before anything reaches a cloud model; tool calls get the real values back, so the agent can still write a config file.
+
 Images pick their model automatically too: when a screenshot, web page or picture reaches a text-only chat model,
 a vision model that can use tools takes over the turn (the *Vision model* setting first, then local, then cloud).
 If none can use tools, a vision model describes the image for the chat model instead.
@@ -319,6 +348,52 @@ What the Coder does on Scorpi's own engine (*Basic*, no OpenCode needed), on any
   e.g. *tests must pass*). They come only from your settings, never from a repository.
 - Relative paths and commands start in the project folder, also for parallel helpers.
 
+**Made for free models**
+
+- **Repaired tool calls**: arguments with single quotes, trailing commas, Python literals, unquoted keys or cut off
+  mid-string are repaired; a misnamed tool (`ReadFile`, `functions.read_file`, a typo) or parameter (`file_path`,
+  `old_string`) is mapped to the real one; calls a model writes as text (`<tool_call>`, `<function=...>`, `[TOOL_CALLS]`,
+  a JSON block) are read and run. Models without tool calling get a plain-text tool format and still use every tool.
+- **Loop guard** (`scorpi/guard.py`): the same error coming back three times, a file edited back to an earlier state or a
+  run of failing calls makes the agent stop and change approach; if it keeps going in circles it wraps up with a report
+  instead of burning requests.
+- **The right model for each step** (*Connect → Model → Model for each step*): *Smart* (default) sends context
+  summaries and titles to a fast model and hands work that is stuck (four failed test runs, or a loop) to the strongest
+  coder of another provider. *Thrifty* also starts coding on the fast model and steps up when it struggles.
+
+**Proof, not promises**
+
+- **Tests first** (the mode chip, Shift+Tab, `/tdd`): the coder only writes failing tests and shows them for review.
+  Approved tests become the contract: edits to them are refused, changes through the shell are put back, a test the
+  agent thinks is wrong goes to you as a proposed change, and the work only finishes when they pass.
+- **Visual check** (`visual_check`): the agent opens the page it builds in a hidden browser (Playwright, else Edge or
+  Chrome), sees the screenshot and gets script errors, console errors, files that fail to load, broken images and
+  sideways scrolling. The chat shows it next to the page before the run, with a slider and how much changed. A run that
+  changed web files is checked once more before it finishes and sent back when the page has errors.
+- **Proof of work**: every coding run ends with a card of what was verified *after the last change* (tests, approved
+  tests, syntax checks, the page, a second model's review, your hooks) and what nobody checked. Jobs, the project pane,
+  parallel attempts, notifications and the chat's report show the verdict: *Verified*, *Partly verified*, *Not verified*
+  or *Checks fail*.
+- **Package check** (on by default): before an agent runs `pip`, `uv`, `poetry`, `npm`, `pnpm`, `yarn`, `bun`, `npx`,
+  `cargo` or `gem install`, each package is looked up in its registry. One that does not exist (models invent names,
+  attackers register them) is refused; one that is days old, barely downloaded or one typo away from a popular package
+  needs your OK at any autonomy level.
+
+**While you are away**
+
+- **Fix it**: commands in a project's *Terminal* (dev servers too) are watched; a stack trace, a compile error or an
+  unexpected exit marks them crashed, with a *Fix it* button there, in a toast anywhere in the app, and as a notification
+  when a server breaks while nobody looks. The agent gets the error, the command and what changed recently, fixes it and
+  runs the command again.
+- **The queue** (*Code → Queue*, or *Queue it for later* in a project's mode menu): tasks are worked through one at a
+  time in the hours you pick (overnight by default, right away, or paused), only while a model has requests left, each
+  as a job with checkpoints. Approvals of queued work reach your phone (ntfy); when the queue runs dry a report says what
+  was done and verified. **Upkeep jobs** join it daily or weekly: update dependencies, keep the tests green, a security
+  review, tidy up, refresh the README.
+- **Learning from corrections**: when you ask for changes to a plan or tests, undo a run and say why, or correct the
+  agent (*"don't use jQuery"*), Scorpi suggests one short rule; *Add to AGENTS.md* writes it to the project's rules,
+  which every coding agent reads, so the mistake is not made twice.
+
 ### scorpi-code: the coder in a terminal
 
 `scorpi-code` (Windows: `scorpi-code.cmd`, in the app folder; add it to PATH) runs the same coder in any folder, with the
@@ -334,9 +409,10 @@ scorpi-code -c                       continue the last conversation here
 scorpi-code -m "glm 5"               another model (loose names work)
 ```
 
-At the prompt: `/init /review /test /fix /explain /security`, `/plan`, `/ask /auto /full`, `/model`, `/undo`, `/cost`,
+At the prompt: `/init /review /test /fix /explain /security`, `/plan`, `/tdd`, `/ask /auto /full`, `/model`, `/undo`, `/cost`,
 `/clear`, `/exit`; `@path` includes a file; `!command` runs a command and passes its output along with your next message;
-Ctrl+C stops the agent.
+Ctrl+C stops the agent. When every model is at its usage limit it waits for the first reset and carries on, and a
+correction you type may be offered as a rule for `AGENTS.md`.
 
 ## Privacy & safety
 
@@ -344,8 +420,11 @@ Ctrl+C stops the agent.
 - Reading is allowed by default; running code, controlling the PC, deleting and sending data ask for approval.
   Change any tool in **Connect → Tools & permissions**, and restrict folders there. *Agent autonomy* decides which
   commands go ahead without asking (see *The coding agent*); commands that would wipe a disk or the home folder never run.
+- Private mode and private projects keep work with providers that say they don't train on it; API keys, tokens and
+  passwords are kept out of every request to a cloud model (see *What each provider does with your data*).
+- Packages an agent installs are looked up first: invented names are refused, look-alikes and brand-new packages ask.
 - Guests (people who sign in on another device with their own name) cannot change models, provider URLs, keys,
-  autonomy, hooks or anything else that touches the host's security.
+  autonomy, hooks, privacy or anything else that touches the host's security.
 - Remote devices need the PIN; cross-site requests and DNS-rebinding attempts are rejected.
 
 ## Layout
@@ -358,6 +437,12 @@ ai/
   scorpi/cli.py      scorpi-code, the coder in a terminal        scorpi/safety.py  how risky a command is
   scorpi/coding.py   second opinions, reviews, project commands  scorpi/hooks.py   the user's hooks
   scorpi/compact.py  keeps long turns inside the model's budget  scorpi/codecheck.py  syntax checks after edits
+  scorpi/limits.py   usage limits, pausing and resuming          scorpi/scores.py  which models work here (bench.py)
+  scorpi/toolcalls.py  repairs sloppy tool calls, text tools     scorpi/guard.py   notices loops
+  scorpi/privacy.py  data use, private work, secrets             scorpi/packages.py  checks packages before installs
+  scorpi/contract.py tests first                                 scorpi/proof.py   proof of work
+  scorpi/crash.py    Fix it for crashed commands                 scorpi/backlog.py  the queue and upkeep jobs
+  scorpi/lessons.py  rules learned from corrections              scorpi/tools/visual.py  the page in a browser
   public/            the web app (no build step): index.html, css/app.css, js/
   tests/             python -m unittest discover -s tests -t .   (a mock model server, no keys needed)
 ```

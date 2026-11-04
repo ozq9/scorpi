@@ -52,12 +52,12 @@ function paint() {
   box.replaceChildren(
     h('h3.section-title', 'Queue', h('span.count', waiting || ''), h('span.rule')),
     h('p.section-desc', 'Tasks for later. Scorpi works through them one by one while you are away, as long as the free models have requests left; each gets a checkpoint, so any of them can be undone. Approvals still reach you, on your phone too.'),
-    !data ? h('div.panel.panel-pad.muted', 'Loading…') : data.error ? h('div.panel.panel-pad.muted', data.error) : body(items),
+    ...(!data ? [h('div.panel.panel-pad.muted', 'Loading…')] : data.error ? [h('div.panel.panel-pad.muted', data.error)] : body(items)),
   );
 }
 
 function body(items) {
-  return [controls(), addForm(), items.length ? h('div.q-list', items.slice().reverse().sort(order).map(row)) : null, upkeep(), report()];
+  return [controls(), addForm(), items.length ? h('div.q-list', items.slice().reverse().sort(order).map(row)) : null, upkeep(), report()].filter(Boolean);
 }
 
 const RANK = { running: 0, queued: 1 };

@@ -147,6 +147,8 @@ class Agent:
         self.model = pin_model or coder or model or llm.default_model()
         self.persona = persona  # {"name", "instructions", "workdir", "project"} for a dedicated agent working in the background
         self.workdir = workdir or (persona or {}).get("workdir") or ""  # the project folder tools work in
+        self.checkpoint = (persona or {}).get("checkpoint") or ""  # the project as it was before this run (visual "before")
+        self.started = time.time()
         self.project = project or (persona or {}).get("project") or ""
         self.max_steps = max_steps
         self.auto_approve = auto_approve

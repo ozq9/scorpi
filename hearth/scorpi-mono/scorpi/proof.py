@@ -14,7 +14,9 @@ from .contract import EDIT_TOOLS, is_test_file, targets
 
 DOCS = re.compile(r"\.(md|markdown|txt|rst|adoc)$|(^|/)(LICENSE|CHANGELOG|AUTHORS)[^/]*$", re.I)
 WEB = re.compile(r"\.(html?|css|scss|sass|less|jsx?|tsx?|mjs|vue|svelte|astro)$", re.I)
-COUNTS = re.compile(r"(\d+ passed[^\n]*|Ran \d+ tests?[^\n]*|\d+ tests?,? \d+ (?:failures?|passed)[^\n]*|Tests?:\s+\d+[^\n]*|OK(?: \([^)]*\))?$|FAILED \([^)]*\))", re.M)
+# how test runners say how many tests ran, most telling first
+COUNTS = [re.compile(p, re.M) for p in (r"\d+ passed[^\n=]*", r"\d+ failed[^\n=]*", r"Ran \d+ tests?", r"Tests?:\s+\d+[^\n]*",
+                                         r"\d+ tests?,? \d+ (?:failures?|passed)[^\n]*", r"FAILED \([^)]*\)")]
 
 
 def _first(text, n=160):
@@ -23,8 +25,20 @@ def _first(text, n=160):
 
 
 def _counts(text):
-    found = COUNTS.findall(str(text or ""))
-    return found[-1].strip()[:120] if found else ""
+    for rx in COUNTS:
+        found = rx.findall(str(text or ""))
+        if found:
+            return found[-1].strip(" ,;")[:120]
+    return ""
+
+
+def _command(args, text):
+    """The test command: as given, else as the run_tests output names it ("pytest -q: PASSED in 2s")."""
+    given = str((args or {}).get("command") or "").strip()
+    if given:
+        return given
+    m = re.match(r"\s*(.+?): (?:PASSED|FAILED|passed|failed)", str(text or ""))
+    return m.group(1) if m else _first(text, 80)
 
 
 class Ledger:
@@ -73,7 +87,7 @@ class Ledger:
             for path in targets(name, args or {}, self.workdir or "."):
                 self.checks[self._rel(path)] = (self.seq, False)
         elif name == "run_tests":
-            self.tests.append((self.seq, ok, str((args or {}).get("command") or _first(text, 80)), _counts(text)))
+            self.tests.append((self.seq, ok, _command(args, text), _counts(text)))
         elif name == "check_code":
             for rel in list(self.checks):
                 if ok:
