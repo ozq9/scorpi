@@ -427,6 +427,8 @@ async function tools(body) {
           seg([['ask', 'Ask first'], ['auto', 'Auto'], ['full', 'Full auto']], s.autonomy || 'auto', (v) => saveSettings({ autonomy: v }))),
         h('div.muted', { style: { fontSize: '12.5px', marginTop: '8px' } }, 'Auto: builds, tests and running the project go ahead, and file changes inside a coding project (each run can be undone in Changes → Checkpoints). Full auto: everything goes ahead except destructive commands like deleting folders or force pushes. In a project, Shift+Tab in the prompt box switches it, and Plan first has the coder propose a plan to approve before it builds.'),
       ),
+      h('div.panel', { style: { marginTop: '10px' } },
+        switchRow('Check packages before installing', 'Before an agent runs pip, npm, cargo or gem install, each package is looked up: one that doesn\'t exist (models invent names) is refused, and one that is brand new, barely used or one typo away from a popular name needs your OK, whatever the autonomy.', s.check_packages !== false, (v) => saveSettings({ check_packages: v }))),
     ),
   );
   body.appendChild(hooksSection());

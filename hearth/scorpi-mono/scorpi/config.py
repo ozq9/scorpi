@@ -49,6 +49,7 @@ DEFAULTS = {
     "fast_model": "",  # quick model for side work ("" = automatic)
     "private_mode": False,  # everything only goes to providers that don't train on it, or local models (scorpi/privacy.py)
     "privacy_trusted": [],  # providers the user allows for private work anyway (e.g. after opting out of training there)
+    "check_packages": True,  # look packages up in their registry before an agent installs them (scorpi/packages.py)
     "redact_secrets": True,  # API keys, tokens and passwords are replaced by placeholders before reaching a cloud model
     "cloud_urls": {},  # provider id -> base URL override
     "cloud_extra_models": {},  # provider id -> "model-a, model-b" offered in addition to the live list

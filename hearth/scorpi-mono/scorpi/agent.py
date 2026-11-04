@@ -11,7 +11,7 @@ import threading
 import time
 import traceback
 
-from . import db, events, hooks, limits, llm, privacy, safety, scores, toolcalls, usage
+from . import db, events, hooks, limits, llm, packages, privacy, safety, scores, toolcalls, usage
 from .compact import Compactor
 from .guard import LoopGuard
 from .config import SETTINGS, UPLOADS, WORKSPACE
@@ -611,6 +611,10 @@ class Agent:
         else:
             mode = policy(name)
             verdict, why = self._permission(name, args, mode)
+            checked = self._check_packages(name, args) if verdict != "block" and mode != "off" else None
+            if checked and checked["ask"] and verdict in ("allow", "ask"):
+                risky = "installs packages that look risky: " + " / ".join(checked["ask"])
+                verdict, why = "ask", (why + "; it also " + risky) if why else risky  # whatever the autonomy level
             if self.plan_mode and entry["risk"] != "read" and name not in PLAN_TOOLS:
                 result = Result("Plan mode: nothing may change yet. Look around with read-only tools, then call submit_plan.", ok=False)
             elif mode == "off":
@@ -618,6 +622,9 @@ class Agent:
             elif verdict == "block":
                 result = Result("Refused: this command %s. Scorpi never runs it. Find a safer way (e.g. delete only the specific "
                                 "files inside the project) or ask the user to do it themselves." % why, ok=False)
+            elif checked and checked["block"]:
+                self.emit({"type": "notice", "text": "Blocked an install: " + checked["block"][0][:200]})
+                result = Result("Refused before installing anything:\n- " + "\n- ".join(checked["block"]), ok=False)
             else:
                 allowed = True
                 if verdict == "ask" and getattr(self.run, "unattended", False):
@@ -646,6 +653,16 @@ class Agent:
         self.emit({"type": "tool_end", "id": call_id, "name": name, "ok": result.ok, "result": (result.text or "")[:2000],
                    "display": result.display, "elapsed": part["elapsed"], "agent": self.label})
         return result
+
+    def _check_packages(self, name, args):
+        """Packages an install command would fetch, looked up in their registry first (packages.py)."""
+        if name != "run_shell":
+            return None
+        command = str((args or {}).get("command") or "")
+        if not packages.installs(command):
+            return None
+        self.emit({"type": "status", "text": "Checking the packages before installing them"})
+        return packages.review(command)
 
     def _command_hooks(self, name, args):
         """before_command hooks: "" to go ahead, or why a blocking hook stopped the command."""
