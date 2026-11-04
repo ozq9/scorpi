@@ -300,6 +300,18 @@ const renderers = {
     );
   },
 
+  // Proof of work (scorpi/proof.py): what was verified after the last change, and what nobody checked.
+  proof(d) {
+    const head = { verified: ['check', 'Verified'], partial: ['eye', 'Partly verified'], unverified: ['eye', 'Not verified'], failing: ['x', 'Checks fail'] }[d.verdict] || ['eye', 'Checks'];
+    const files = d.count === 1 ? '1 file changed' : `${d.count} files changed`;
+    return h('div.card.proof-card.' + d.verdict,
+      h('div.pf-head', icon(head[0]), h('b', head[1]), h('span.muted', files)),
+      d.items.length ? h('ul.pf-items', d.items.map((i) => h('li.' + (i.ok ? 'ok' : 'bad'), icon(i.ok ? 'check' : 'x'), h('span', i.text),
+        i.image ? h('a.pf-shot', { href: i.image, target: '_blank', rel: 'noopener' }, 'screenshot') : null))) : null,
+      d.unverified.length ? h('div.pf-unverified', h('div.pf-label', 'Not checked'), h('ul', d.unverified.map((u) => h('li', u)))) : null,
+      d.files.length ? h('details.pf-files', h('summary', 'Changed files'), h('div.mono', d.files.join('\n'))) : null);
+  },
+
   // A visual check of a web page (scorpi/tools/visual.py): the page now, the page before the run to compare with a
   // slider, and what went wrong in the browser.
   visual(d) {

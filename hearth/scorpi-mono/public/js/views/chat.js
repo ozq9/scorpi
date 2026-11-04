@@ -863,7 +863,17 @@ class TurnView {
       const id = part.id || Math.random().toString(36);
       this.toolStart({ id, name: part.name, args: part.args, agent: part.agent });
       this.toolEnd({ id, ok: part.ok !== false, result: part.result, display: part.display, elapsed: part.elapsed });
+    } else if (part.type === 'card') {
+      this.card(part.display);
     }
+  }
+
+  // A card at the end of the turn, outside the steps (the proof of what was verified).
+  card(display) {
+    const node = renderCard(display, { conversation: state.activeId });
+    if (!node) return;
+    this.body.appendChild(node);
+    if (nearBottom()) scrollToEnd();
   }
 
   finish(content, { isLast = false } = {}) {
@@ -1191,6 +1201,9 @@ function applyEvent(view, ev) {
       break;
     case 'tool_end':
       view.toolEnd(ev);
+      break;
+    case 'card':
+      view.card(ev.display);
       break;
     case 'approval':
       view.approval(ev);

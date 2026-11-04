@@ -13,7 +13,7 @@ import time
 import traceback
 
 from . import contract as C
-from . import db, events, hooks, limits, llm, packages, privacy, safety, scores, toolcalls, usage
+from . import db, events, hooks, limits, llm, packages, privacy, proof, safety, scores, toolcalls, usage
 from .compact import Compactor
 from .guard import LoopGuard
 from .config import SETTINGS, UPLOADS, WORKSPACE
@@ -172,6 +172,8 @@ class Agent:
         self.approved_tests = None  # set when the user approves them
         self.contract = C.Contract.from_dict(contract, self.workdir) if contract and self.workdir else None  # approved tests to make pass
         self.contract_passed = False
+        self.ledger = proof.Ledger(self.workdir)  # what was checked, in order: the proof card at the end (proof.py)
+        self.proof = None
         self.ui_dirty = False  # web files changed since the page was last looked at (visual check at the end)
         self.visual_rounds = 0
         self.current = self.model  # the model answering right now (after switches): its tool calls count for it (scores.py)
@@ -431,7 +433,24 @@ class Agent:
                 model, caps, wrap_up = self._steer(model, caps, alerts, messages)
             if images and not self.cancelled():
                 model, caps = self._show_images(model, caps, images[-2:], messages)
+        self._prove()
         return "\n\n".join(texts)
+
+    def _prove(self):
+        """The proof card for coding work that changed files: what was verified after the last change, and what not."""
+        if self.depth or not self.workdir or self.plan_mode or self.tests_mode:
+            return
+        from .tools.dev import detect_test_command
+        try:
+            has_tests = bool(detect_test_command(self.workdir))
+        except Exception:  # noqa: BLE001 - unknown is fine
+            has_tests = None
+        card = self.ledger.card(has_tests)
+        if not card:
+            return
+        self.proof = card
+        self.parts.append({"type": "card", "display": card})
+        self.emit({"type": "card", "display": card})
 
     # ---------- staying on track (guard.py) and moving to a stronger model (step routing) ----------
 
@@ -689,6 +708,7 @@ class Agent:
         part.update({"status": "done" if result.ok else "error", "ok": result.ok, "result": (result.text or "")[:2000],
                      "display": result.display, "elapsed": round(time.time() - started, 2)})
         scores.tool_result(self.current, name, result.ok, result.text)
+        self.ledger.tool(name, args, result.ok, result.text, result.display)
         self.files.extend(result.files or [])
         self.emit({"type": "tool_end", "id": call_id, "name": name, "ok": result.ok, "result": (result.text or "")[:2000],
                    "display": result.display, "elapsed": part["elapsed"], "agent": self.label})
@@ -744,6 +764,7 @@ class Agent:
             self.emit({"type": "notice", "text": "Put back the approved tests that were changed: " + ", ".join(undone)})
         self.emit({"type": "status", "text": "Running the approved tests"})
         result = self._invoke(TOOLS["run_tests"], {"command": deal.command})
+        self.ledger.approved_tests(result.ok, deal.files)
         if result.ok:
             self.contract_passed = True
             self.emit({"type": "notice", "text": "The approved tests pass."})
@@ -765,6 +786,8 @@ class Agent:
         if not results:
             return ""
         failed = hooks.blocking_failures(results)
+        for r in results:
+            self.ledger.hook(r["ok"], hooks.label(r))
         self.emit({"type": "notice", "text": "Hooks: " + ", ".join("%s %s" % (hooks.label(r), "ok" if r["ok"] else "failed") for r in results)})
         if not failed:
             return ""
@@ -1108,6 +1131,7 @@ def run_subagent(parent_ctx, kind, task):
     sub = Agent(parent.run, model=parent.model, skill=spec["skill"], groups=spec["groups"] + ["core"], depth=parent.depth + 1, label=kind, emit=relay,
                 workdir=parent.workdir, project=parent.project)
     sub.private = parent.private
+    sub.ledger = parent.ledger  # what the sub-agent checks counts for the job's proof
     text = sub.run_turn([{"role": "user", "content": "You are the %s sub-agent. Complete this task and reply with a self-contained result "
                                                        "(facts, paths, sources) for the main assistant:\n\n%s" % (kind, task)}], task)
     parent.files.extend(sub.files)
@@ -1163,6 +1187,7 @@ def run_subagents(parent_ctx, tasks):
                     workdir=parent.workdir, project=parent.project)
         sub.model = parent.model  # same model as the job, also for coding work with its own coding model
         sub.private = parent.private  # helpers run in threads of their own: they carry the job's privacy with them
+        sub.ledger = parent.ledger  # and their edits and checks count for the job's proof
         prompt = ("You are %s, one of several helper agents working IN PARALLEL on parts of one job. Do only your part; other "
                   "helpers handle the rest at the same time, so do not touch files outside your part.%s\n\nYour part:\n%s\n\n"
                   "When done, reply with a short self-contained report for the lead agent: what you did, files (full paths), "

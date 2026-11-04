@@ -10,7 +10,7 @@ import time
 import traceback
 import unicodedata
 
-from . import db, events, gitops, limits, llm, notify, opencode, privacy, scheduler, scores
+from . import db, events, gitops, limits, llm, notify, opencode, privacy, proof, scheduler, scores
 from .config import DATA_DIR, SETTINGS, WORKSPACE
 
 PROJECTS = os.path.join(WORKSPACE, "projects")
@@ -267,6 +267,7 @@ class Job:
         self.testing = False  # this run writes tests for the user to approve first (tests first, contract.py)
         self.contract = None  # the approved tests the job builds against: {files, command, summary, content}
         self.pending_contract = None  # approved in this run: the build starts once it ends
+        self.proof = None  # what the last run verified (proof.py)
         self._published = 0.0
 
     def kwargs(self):
@@ -306,6 +307,7 @@ class Job:
         display: what the chat shows as the user's message when the prompt is longer (a /command)."""
         from .agent import start_turn
         self.subs = {}  # helpers belong to one run
+        self.proof = None
         self.planning = bool(plan)
         self.testing = bool(tests) and not plan
         self.pending_contract = None
@@ -409,6 +411,8 @@ class Job:
             from .tools.core import plan_steps
             self.plan = _plan(plan_steps(self.approved_plan))
             self.activity = "Plan approved, starting to build"
+        elif kind == "card" and (ev.get("display") or {}).get("type") == "proof":
+            self.proof = ev["display"]
         elif kind == "tests_approved":
             self.pending_contract = ev.get("contract") or None
             self.note_on_tests = ev.get("note") or ""
@@ -481,6 +485,8 @@ class Job:
         if self.workdir and self.project and SETTINGS.get("checkpoints", True):
             threading.Thread(target=self._checkpoint_after, daemon=True).start()
         summary = _first_line(self.result)[:220]
+        if self.proof and self.status == "done":
+            summary = (proof.HEADLINE[self.proof["verdict"]] + " · " + summary)[:240]
         notify.send("%s · %s %s" % (self.title, self.agent["name"], {"done": "finished", "failed": "failed", "stopped": "stopped"}[self.status]),
                     summary or "Open Scorpi to see the result.", level="success" if self.status == "done" else "warning",
                     link="/c/" + (self.parent_conv or self.conv_id))
@@ -535,7 +541,9 @@ class Job:
                   "Tell the user in their language, in two to five sentences, what was done, where the results are (full paths) "
                   "and what they can do next. Don't repeat the whole report and don't call tools unless the user's question needs it."
                   % (self.agent["name"], "finished" if self.status == "done" else "failed at", self.title, self.id,
-                     (self.result or self.error)[:6000], ("Files: %s\n" % ", ".join(self.files[:20])) if self.files else ""))
+                     (self.result or self.error)[:6000], ("Files: %s\n" % ", ".join(self.files[:20])) if self.files else "")
+                  + ("What Scorpi itself verified (say it plainly, especially what was not checked): %s\n" % proof.summary(self.proof)
+                     if self.proof else ""))
         run = start_turn(self.parent_conv, prompt, groups=["agents"], origin="agent_update", note=note)
         events.publish("agent_update", {"conv_id": self.parent_conv, "run_id": run.id, "job_id": self.id, "note": note})
 
@@ -584,7 +592,8 @@ class Job:
                 "workdir": self.workdir, "project": self.project, "checkpoint": self.checkpoint, "live": True,
                 "planning": self.planning and self.status == "running", "run_id": self.run.id if self.run else "",
                 "run_note": self.run_note, "attempt_of": self.attempt_of, "resume_at": self.resume_at if self.status == "waiting" else 0,
-                "testing": self.testing and self.status == "running", "contract": (self.contract or {}).get("files") or []}
+                "testing": self.testing and self.status == "running", "contract": (self.contract or {}).get("files") or [],
+                "proof": self.proof}
 
     def publish(self, force=False):
         now = time.time()

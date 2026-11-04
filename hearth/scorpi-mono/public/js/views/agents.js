@@ -102,6 +102,7 @@ export function jobCard(job, { compact = false } = {}) {
         )
       : null,
     job.question ? questionBlock(job) : null,
+    !running && job.proof ? proofLine(job.proof) : null,
     !running && job.result && !compact ? h('div.job-result', job.result.split('\n').filter((l) => l.trim()).slice(0, 6).join('\n')) : null,
     !running && job.error && job.status !== 'waiting' ? h('div.job-result.err', job.error) : null,
     h(
@@ -114,6 +115,16 @@ export function jobCard(job, { compact = false } = {}) {
     ),
   );
   return card;
+}
+
+// What the job's last run verified (scorpi/proof.py), in one line.
+export function proofLine(p) {
+  const head = { verified: 'Verified', partial: 'Partly verified', unverified: 'Not verified', failing: 'Checks fail' }[p.verdict] || 'Checks';
+  const good = p.items.filter((i) => i.ok).map((i) => i.text);
+  const bad = p.items.filter((i) => !i.ok).map((i) => i.text);
+  const text = [...bad, ...good].slice(0, 2).join(' · ') || p.unverified[0] || '';
+  return h('div.job-proof.' + p.verdict, { title: [...bad, ...good, ...p.unverified.map((u) => 'Not checked: ' + u)].join('\n') },
+    icon(p.verdict === 'verified' ? 'check' : p.verdict === 'failing' ? 'x' : 'eye'), h('b', head), text ? h('span', text) : null);
 }
 
 // The plan an agent proposes before building (plan mode): read it, approve, or say what to change.

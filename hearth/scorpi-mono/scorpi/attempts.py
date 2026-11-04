@@ -215,7 +215,8 @@ def public(record, with_diff=False):
         item = {"n": a["n"], "model": a["model"], "model_label": llm.label(a["model"]), "job_id": a["job_id"], "conv_id": a.get("conv_id", ""),
                 "status": job.status if job else "gone", "activity": job.activity if job else "", "result": (job.result if job else "")[:600],
                 "steps_done": sum(1 for s in job.plan if s["status"] == "done") if job else 0, "steps_total": len(job.plan) if job else 0,
-                "exists": os.path.isdir(a["dir"])}
+                "exists": os.path.isdir(a["dir"]), "proof": (job.proof or {}).get("verdict", "") if job else "",
+                "proof_items": [i["text"] for i in (job.proof or {}).get("items", [])][:4] if job else []}
         if with_diff and item["exists"] and item["status"] != "running":
             files, _ = changes(path, a["dir"])
             item.update(files=files, add=sum(f["add"] for f in files), dele=sum(f["del"] for f in files), count=len(files))

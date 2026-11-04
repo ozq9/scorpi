@@ -10,7 +10,7 @@ import { confirmSheet, field, popover, sheet, toast } from '../lib/ui.js';
 import { LANGS, kindOf, openViewer, previewBody } from '../lib/viewer.js';
 import { navigate } from '../router.js';
 import { bus, prefs, setPref, state } from '../store.js';
-import { shortModel } from './agents.js';
+import { proofLine, shortModel } from './agents.js';
 import { renderChanges, renderGithub } from './project-git.js';
 import { renderTerminal, termRunning, unmountTerminal } from './project-term.js';
 
@@ -210,6 +210,8 @@ function attemptsNode() {
         applied ? h('span.badge.ok', 'applied') : h('span.badge' + (STATUS[a.status] || ['', ''])[1], (STATUS[a.status] || [a.status])[0])),
       h('div.att-now', running ? h('span.job-pulse') : null, h('span', running ? a.activity || 'Working' : (a.result || a.activity || '').split('\n').find((l) => l.trim()) || '')),
       !running && a.count !== undefined ? h('div.att-stat', a.count ? [`${a.count} file${a.count === 1 ? '' : 's'} `, diffStat(a.add, a.dele)] : h('span.muted', 'no changes')) : null,
+      !running && a.proof ? h('div.att-proof.' + a.proof, { title: (a.proof_items || []).join('\n') }, icon(a.proof === 'verified' ? 'check' : a.proof === 'failing' ? 'x' : 'eye'),
+        { verified: 'Verified', partial: 'Partly verified', unverified: 'Not verified', failing: 'Checks fail' }[a.proof] || a.proof) : null,
       h('div.att-acts',
         !running && a.files && a.files.length ? h('button.btn.small.quiet', { onclick: () => sheet({ title: `Try #${a.n} · ${a.model_label}`, body: diffList(a.files, { open: a.files.length <= 3 }), foot: (close) => [h('button.btn.quiet', { onclick: close }, 'Close')] }) }, icon('diff'), 'Diff') : null,
         a.conv_id ? h('a.btn.small.quiet', { href: '/c/' + a.conv_id, 'data-link': '' }, icon('chat'), 'Chat') : null,
@@ -519,6 +521,7 @@ function agentsNode() {
       h('button.btn.small.quiet', { onclick: () => decide(job.approval.id, 'deny') }, 'Deny')));
   }
   if (job.question) nodes.push(h('div.pa-ask', icon('chat'), h('div.grow', h('b', 'Asks: '), job.question.title || 'a question'), h('span.muted.small', 'Answer in the chat')));
+  if (job.proof && job.status !== 'running') nodes.push(h('div.pc-sec', proofLine(job.proof)));
   if ((job.contract || []).length) {
     nodes.push(h('div.pc-sec', h('div.pa-h', 'Approved tests', h('span.count', String(job.contract.length))),
       h('div.muted.small', 'The contract: the agent builds until these pass and cannot change them without asking.'),

@@ -724,3 +724,13 @@ a.gh-row:hover, .gh-row a.gh-title:hover { background: var(--fill-1); color: var
 .pa-contract { list-style: none; margin: var(--s-4) 0 0; padding: 0; display: grid; gap: 4px; font-size: var(--t-xs); }
 .pa-contract li { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
 .pa-contract svg { width: 12px; height: 12px; flex: none; color: var(--muted); }
+
+/* proof of work on job cards, the project pane and attempts (scorpi/proof.py) */
+.job-proof { display: flex; align-items: baseline; gap: var(--s-3); flex-wrap: wrap; font-size: var(--t-sm); margin-top: var(--s-4); min-width: 0; }
+.job-proof svg { width: 13px; height: 13px; flex: none; transform: translateY(2px); }
+.job-proof span { color: var(--muted); overflow-wrap: anywhere; min-width: 0; }
+.job-proof.verified svg, .att-proof.verified svg { color: var(--ok); }
+.job-proof.failing svg, .att-proof.failing svg { color: var(--danger); }
+.job-proof.partial svg, .job-proof.unverified svg, .att-proof.partial svg, .att-proof.unverified svg { color: var(--warn); }
+.att-proof { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-xs); margin-top: 4px; }
+.att-proof svg { width: 12px; height: 12px; }
