@@ -20,6 +20,7 @@ from . import events
 HELP = """Commands
   /init /review /test /fix /explain /security   project commands (anything after them goes along)
   /plan            your next message: see a plan and approve it before anything changes
+  /tdd             tests first: approve the tests, then it builds until they pass
   /ask /auto /full what the agent may do without asking (now: {autonomy})
   /model [name]    show or switch the model (loose names work: "glm 5", "groq llama")
   /undo            put the files back as they were before the last run
@@ -177,14 +178,16 @@ class UI:
     def approval(self, ev):
         """(decision, note) for an approval card."""
         summary = ev.get("summary") or {}
-        if ev.get("tool") == "submit_plan":
+        if ev.get("tool") in ("submit_plan", "submit_tests", "propose_test_change"):
+            kind = {"submit_tests": "Tests", "propose_test_change": "Change an approved test"}.get(ev.get("tool"), "Plan")
             self.line("")
-            self.line(self.c.bold(self.c.blue("Plan: " + (summary.get("title") or "review it"))))
+            self.line(self.c.bold(self.c.blue("%s: %s" % (kind, summary.get("title") or "review it"))))
             for ln in str(summary.get("plan") or "").splitlines():
                 self.line("  " + ln)
             self.line("")
+            question = {"Tests": "Approve these tests and build until they pass? ", "Plan": "Approve and build it? "}.get(kind, "Allow the change? ")
             while True:
-                answer = self.ask(self.c.bold("Approve and build it? ") + "[y]es / [c]hange / [n]o: ").strip().lower()
+                answer = self.ask(self.c.bold(question) + "[y]es / [c]hange / [n]o: ").strip().lower()
                 if answer in ("y", "yes", ""):
                     return "allow", ""
                 if answer in ("c", "change"):
@@ -218,6 +221,8 @@ class Session:
         self.headless = headless
         self.autonomy = autonomy or SETTINGS["autonomy"] or "auto"
         self.plan_next = False
+        self.tests_next = False  # /tdd: the next message starts with tests to approve
+        self.contract = None  # approved tests the current build works against
         self.pending = []  # output of !commands, sent along with the next message
         projects = os.path.realpath(agents.PROJECTS)
         if os.path.dirname(self.folder) == projects:
@@ -270,9 +275,9 @@ class Session:
             except Exception:  # noqa: BLE001 - no checkpoint (git missing, huge folder) never blocks the work
                 pass
         agent = Agent(run, model=self.model, skill="code", groups=["code", "files", "web", "docs"], persona=self.persona(),
-                      max_steps=80, plan_mode=self.plan_next, autonomy=self.autonomy,
+                      max_steps=80, plan_mode=self.plan_next, autonomy=self.autonomy, tests_mode=self.tests_next, contract=self.contract,
                       workdir=self.folder, project=self.project)
-        self.plan_next = False
+        self.plan_next = self.tests_next = False
         result = {"text": "", "error": "", "resume_at": 0}
 
         def work():
@@ -294,6 +299,14 @@ class Session:
         data = {"parts": agent.parts, "model": agent.model, "skill": "code", "files": agent.files, "error": result["error"], "stopped": run.cancelled}
         db.add_message(conv, "assistant", answer, data)
         db.touch_conversation(conv)
+        if agent.approved_tests and not run.cancelled:
+            self.contract = agent.approved_tests
+            try:
+                return self.turn("Build what I asked for so that the approved tests pass (run them with `%s`). Do not change the "
+                                 "test files; if one is truly wrong, call propose_test_change.\n\nThe request:\n%s"
+                                 % (self.contract["command"], text), display="(building until the approved tests pass)")
+            finally:
+                self.contract = None
         if agent.approved_plan and not run.cancelled:
             return self.turn("Build the plan the user approved, step by step, and keep update_plan current:\n\n" + agent.approved_plan,
                              display="(building the approved plan)")
@@ -399,6 +412,12 @@ class Session:
             return False
         if name == "help":
             self.ui.line(HELP.format(autonomy=self.autonomy))
+        elif name == "tdd":
+            self.tests_next, self.plan_next = True, False
+            if rest.strip():
+                self.turn(rest.strip(), display="/tdd " + rest.strip())
+            else:
+                self.ui.line("Tests first: describe what to build; you approve the tests, then it builds until they pass.")
         elif name == "plan":
             self.plan_next = True
             if rest.strip():
@@ -467,7 +486,7 @@ class Session:
                 return
 
     def _read(self):
-        prompt = self.ui.c.bold("plan › " if self.plan_next else "› ")
+        prompt = self.ui.c.bold("plan › " if self.plan_next else "tests › " if self.tests_next else "› ")
         lines = [input("\n" + prompt)]
         while lines[-1].endswith("\\"):
             lines[-1] = lines[-1][:-1]

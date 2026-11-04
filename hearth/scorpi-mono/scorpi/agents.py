@@ -254,6 +254,9 @@ class Job:
         self.attempt_of = ""  # the project this job is one of several parallel attempts for (scorpi/attempts.py)
         self.approved_plan = ""  # set when the user approves: the job then builds it in a new run
         self.resume_at = 0  # every model was at its limit: the job waits ("waiting") and continues at this time
+        self.testing = False  # this run writes tests for the user to approve first (tests first, contract.py)
+        self.contract = None  # the approved tests the job builds against: {files, command, summary, content}
+        self.pending_contract = None  # approved in this run: the build starts once it ends
         self._published = 0.0
 
     def kwargs(self):
@@ -287,13 +290,17 @@ class Job:
         self.publish(force=True)
         return live
 
-    def start(self, prompt, plan=False, system="", display=""):
+    def start(self, prompt, plan=False, system="", display="", tests=False):
         """Start a run. plan: look around and propose a plan first; the building starts once the user approves it.
         system: a short line the chat shows instead of the prompt, for runs the job starts by itself.
         display: what the chat shows as the user's message when the prompt is longer (a /command)."""
         from .agent import start_turn
         self.subs = {}  # helpers belong to one run
         self.planning = bool(plan)
+        self.testing = bool(tests) and not plan
+        self.pending_contract = None
+        if self.testing:
+            self.tests_request = prompt  # what the approved tests are for: the build gets it again
         self.approved_plan = ""
         self.resume_at = 0
         if self.id:
@@ -302,14 +309,16 @@ class Job:
             # the files as they are before the agent touches them: Changes shows the run's diff, and it can be undone
             self.checkpoint = gitops.snapshot(self.project, self.workdir, "Before: %s — %s" % (self.title, _first_line(prompt)[:120]))
         private = privacy.project_private(self.project or self.attempt_of) or SETTINGS.get("private_mode")
-        if self.workdir and opencode.use_for(self.agent) and not plan and not private:  # private work stays on Scorpi's own engine
+        # private work, tests first and building against approved tests stay on Scorpi's own engine
+        if self.workdir and opencode.use_for(self.agent) and not plan and not private and not self.testing and not self.contract:
             agent = dict(self.agent, model=self.model) if self.model else self.agent
             run = opencode.start(self.conv_id, prompt, agent, self.workdir, session=self.oc_session, on_session=self._on_session,
                                  title=self.title, system=system, display=display)
         else:
             groups = json.loads(self.agent.get("groups") or "[]") or None
             run = start_turn(self.conv_id, prompt, skill=self.agent.get("skill") or "", groups=groups, origin="agent",
-                             title_hint=self.title, agent_kwargs=dict(self.kwargs(), plan_mode=bool(plan)), system=system,
+                             title_hint=self.title, agent_kwargs=dict(self.kwargs(), plan_mode=bool(plan), tests_mode=self.testing,
+                                                                     contract=self.contract), system=system,
                              display=display, command=display.split()[0][1:] if display.startswith("/") else "")
         self.run = run
         self.run_note = system
@@ -379,8 +388,10 @@ class Job:
         elif kind == "approval":
             summary = ev.get("summary") or {}
             self.approval = {"id": ev.get("id"), "tool": ev.get("tool"), "title": summary.get("title") or ev.get("tool"),
-                             "args": summary.get("args") or {}, "why": summary.get("why") or "", "plan": summary.get("plan") or ""}
-            self.activity = "Waiting for you to review the plan" if summary.get("plan") else "Waiting for your approval"
+                             "args": summary.get("args") or {}, "why": summary.get("why") or "", "plan": summary.get("plan") or "",
+                             "kind": summary.get("kind") or ""}
+            self.activity = {"tests": "Waiting for you to review the tests", "test_change": "Asking you to change an approved test"}.get(
+                summary.get("kind"), "Waiting for you to review the plan" if summary.get("plan") else "Waiting for your approval")
         elif kind == "plan_approved":
             self.approved_plan = ev.get("plan") or ""
             if ev.get("note"):
@@ -388,6 +399,10 @@ class Job:
             from .tools.core import plan_steps
             self.plan = _plan(plan_steps(self.approved_plan))
             self.activity = "Plan approved, starting to build"
+        elif kind == "tests_approved":
+            self.pending_contract = ev.get("contract") or None
+            self.note_on_tests = ev.get("note") or ""
+            self.activity = "Tests approved, starting to build"
         elif kind == "approval_done":
             self.approval = None
         elif kind == "question":
@@ -418,12 +433,22 @@ class Job:
             return self.start("Build the plan the user approved, step by step, and keep update_plan current:\n\n%s%s"
                               % (plan, ("\n\nThe user also wrote:\n" + "\n\n".join(notes)) if notes else ""),
                               system="Plan approved: building it")
+        if self.pending_contract and not run.cancelled:
+            # the user approved the tests: build until they pass, without changing them
+            self.contract, self.pending_contract = self.pending_contract, None
+            note = getattr(self, "note_on_tests", "")
+            return self.start("Build what the user asked for so that the approved tests pass (run them with `%s`). Do not change "
+                              "the test files; if one is truly wrong, call propose_test_change.\n\nThe request:\n%s%s"
+                              % (self.contract["command"], getattr(self, "tests_request", "") or self.goal,
+                                 ("\n\nThe user's note on approving the tests: " + note) if note else ""),
+                              system="Tests approved: building until they pass")
         if run.inbox and not run.cancelled:
             # the user wrote after the agent's last step: carry on with it
             notes, run.inbox[:] = list(run.inbox), []
             return self.start("\n\n".join(notes))
         if self.error and self.resume_at and not run.cancelled:
-            return self._pause()
+            return self._pause()  # (the approved tests stay the contract when it continues)
+        self.contract = None
         self.result = (run.result or "").strip()
         self.status = "stopped" if run.cancelled else "failed" if self.error else "done"
         self.activity = {"done": "Finished", "failed": "Failed: " + self.error[:160], "stopped": "Stopped"}[self.status]
@@ -504,7 +529,7 @@ class Job:
         run = start_turn(self.parent_conv, prompt, groups=["agents"], origin="agent_update", note=note)
         events.publish("agent_update", {"conv_id": self.parent_conv, "run_id": run.id, "job_id": self.id, "note": note})
 
-    def message(self, text, plan=False, display=""):
+    def message(self, text, plan=False, display="", tests=False):
         """Pass the user's words on: at once to a running agent, else as a new run (plan: propose a plan first).
         display: what the chat shows instead of text (a /command whose instructions are longer)."""
         text = str(text or "").strip()
@@ -520,7 +545,7 @@ class Job:
             self.activity = "Got your message, reading it"
             self.publish(force=True)
             return "delivered"
-        self.start(text, plan=plan, display=display)
+        self.start(text, plan=plan, display=display, tests=tests)
         return "restarted"
 
     def stop(self):
@@ -548,7 +573,8 @@ class Job:
                 "updated": self.updated, "conv_id": self.conv_id, "parent_conv": self.parent_conv, "origin": self.origin,
                 "workdir": self.workdir, "project": self.project, "checkpoint": self.checkpoint, "live": True,
                 "planning": self.planning and self.status == "running", "run_id": self.run.id if self.run else "",
-                "run_note": self.run_note, "attempt_of": self.attempt_of, "resume_at": self.resume_at if self.status == "waiting" else 0}
+                "run_note": self.run_note, "attempt_of": self.attempt_of, "resume_at": self.resume_at if self.status == "waiting" else 0,
+                "testing": self.testing and self.status == "running", "contract": (self.contract or {}).get("files") or []}
 
     def publish(self, force=False):
         now = time.time()
@@ -607,7 +633,7 @@ def _first_line(text):
     return next((line.strip() for line in str(text or "").splitlines() if line.strip()), "")
 
 
-def assign(agent, task, title="", parent_conv="", origin="agent", project="", conv_id=None, model="", plan=False, display=""):
+def assign(agent, task, title="", parent_conv="", origin="agent", project="", conv_id=None, model="", plan=False, display="", tests=False):
     """Hand a job to an agent; it starts at once in the background (plan: with a plan for the user to approve first).
     Returns the Job."""
     if isinstance(agent, str):
@@ -631,7 +657,7 @@ def assign(agent, task, title="", parent_conv="", origin="agent", project="", co
     if parent_conv:
         prompt += "\n\n(Handed over by Scorpi's chat assistant on the user's behalf.)"
     return Job(agent, title, task, conv["id"], parent_conv=parent_conv, origin=origin, workdir=workdir, project=folder,
-               model=model).start(prompt, plan=plan, display=display)
+               model=model).start(prompt, plan=plan, display=display, tests=tests)
 
 
 def job(job_id):

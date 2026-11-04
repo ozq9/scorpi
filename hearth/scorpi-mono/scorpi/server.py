@@ -789,6 +789,7 @@ def chat(h):
     conv = db.get_my_conversation(cid) if cid else None  # someone else's chat id just starts a new chat
     project = str(body.get("project") or "")
     plan = body.get("mode") == "plan"  # the Code area's "Plan first": the coder proposes a plan to approve before building
+    tests = body.get("mode") == "tests"  # "Tests first": the coder writes failing tests to approve, then builds until they pass
     shown = ""
     words = text.split(None, 1)
     if words and words[0].startswith("/") and words[0][1:].lower() in coding.COMMANDS and (project or (conv and agents.job_for_conversation(conv["id"]))):
@@ -809,7 +810,7 @@ def chat(h):
         else:
             try:
                 job = agents.assign("coder", text, title=body.get("title") or project.replace("-", " ").capitalize(), project=project, plan=plan,
-                                    display=shown)
+                                    display=shown, tests=tests)
             except ValueError as exc:
                 return h.error(str(exc))
             return follow_run(h, job.run)
@@ -821,7 +822,7 @@ def chat(h):
         # an agent job's own conversation: the message goes to the agent, which carries on in the same chat
         busy = events.active_run_for(conv["id"])
         try:
-            job.message(text, plan=plan, display=shown)
+            job.message(text, plan=plan, display=shown, tests=tests)
         except Exception as exc:
             return h.error(str(exc))
         return follow_run(h, job.run, len(job.run.events) if busy is job.run else 0)
@@ -1687,7 +1688,7 @@ def agent_job_message(h, jid):
         return h.error("not found", 404)
     try:
         body = h.body_json()
-        h.send_json({"ok": True, "how": job.message(body.get("text"), plan=body.get("mode") == "plan")})
+        h.send_json({"ok": True, "how": job.message(body.get("text"), plan=body.get("mode") == "plan", tests=body.get("mode") == "tests")})
     except ValueError as exc:
         h.error(str(exc))
 
@@ -1864,7 +1865,8 @@ def project_create(h):
     if agents.latest_job(folder) and os.path.isdir(agents.project_path(folder)) and not body.get("continue"):
         folder = "%s-%s" % (folder, time.strftime("%m%d-%H%M"))  # a new project never takes over an old one's folder
     try:
-        job = agents.assign(body.get("agent") or "coder", task, title=name, project=folder, plan=body.get("mode") == "plan")
+        job = agents.assign(body.get("agent") or "coder", task, title=name, project=folder, plan=body.get("mode") == "plan",
+                            tests=body.get("mode") == "tests")
     except ValueError as exc:
         return h.error(str(exc))
     h.send_json({"slug": folder, "job": job.public(), "conv_id": job.conv_id, "run_id": job.run.id})

@@ -11,6 +11,7 @@ import threading
 import time
 import traceback
 
+from . import contract as C
 from . import db, events, hooks, limits, llm, packages, privacy, safety, scores, toolcalls, usage
 from .compact import Compactor
 from .guard import LoopGuard
@@ -135,7 +136,8 @@ class Ctx:
 
 class Agent:
     def __init__(self, run, model=None, skill=None, groups=None, depth=0, label="", emit=None,
-                 persona=None, max_steps=None, auto_approve=False, pin_model="", workdir="", project="", plan_mode=False, autonomy=""):
+                 persona=None, max_steps=None, auto_approve=False, pin_model="", workdir="", project="", plan_mode=False, autonomy="",
+                 tests_mode=False, contract=None):
         self.run = run
         # coding work (the Code skill, coder sub-agents) can run on its own model, e.g. an OpenCode Go plan;
         # a dedicated agent's own model (pin_model) wins over both
@@ -164,6 +166,10 @@ class Agent:
         self.hook_rounds = 0  # times after_turn hooks sent the agent back to work this turn
         self.approved_plan = ""
         self.stop_after_tools = False  # a tool ended the turn (the plan was approved or rejected)
+        self.tests_mode = tests_mode  # tests first: write failing tests and have them approved (contract.py)
+        self.approved_tests = None  # set when the user approves them
+        self.contract = C.Contract.from_dict(contract, self.workdir) if contract and self.workdir else None  # approved tests to make pass
+        self.contract_passed = False
         self.current = self.model  # the model answering right now (after switches): its tool calls count for it (scores.py)
         self.text_tools = False  # the model cannot call tools natively: it uses the text tool format (toolcalls.py)
         self.guard = LoopGuard()  # notices when the work goes in circles (guard.py)
@@ -288,6 +294,13 @@ class Agent:
             lines.append("ACTIVE SKILL — %s\n%s" % (self.skill["name"], self.skill["instructions"]))
         if self.plan_mode:
             lines.append(PLAN_MODE)
+        if self.tests_mode:
+            lines.append(C.TESTS_MODE)
+        if self.contract:
+            lines.append("APPROVED TESTS — the user approved these tests as the contract: %s (run them with `%s`). Build until they "
+                         "all pass. Do not change them: edits to them are refused. If one is truly wrong (not just failing), call "
+                         "propose_test_change and let the user decide. You are done only when they pass."
+                         % (", ".join(self.contract.files), self.contract.command))
         if SETTINGS["system_prompt"] and host:
             lines.append("User's standing instructions:\n" + SETTINGS["system_prompt"])
         return "\n\n".join(lines)
@@ -340,6 +353,11 @@ class Agent:
                 names += [n for n in ("submit_plan",) if n not in names and n in TOOLS]
             else:
                 names = [n for n in names if n != "submit_plan"]
+            names = [n for n in names if n not in ("submit_tests", "propose_test_change")]
+            if self.tests_mode and "submit_tests" in TOOLS:
+                names.append("submit_tests")
+            if self.contract and "propose_test_change" in TOOLS:
+                names.append("propose_test_change")
             if "computer" in active and COMPUTER_GUIDE not in messages[0]["content"]:
                 messages[0]["content"] += "\n\n" + COMPUTER_GUIDE
             tools = [schema_for(n) for n in names] if names and step < max_steps and not wrap_up else None
@@ -375,7 +393,9 @@ class Agent:
                 if self.depth == 0 and self.run and self.run.inbox and step < max_steps - 1:
                     messages.append({"role": "assistant", "content": text or ""})
                     continue  # the user wrote while this answer streamed: carry on with their message
-                feedback = self._turn_hooks() if step < max_steps - 1 and not self.cancelled() and not self.plan_mode else ""
+                feedback = ""
+                if step < max_steps - 1 and not self.cancelled() and not self.plan_mode and not self.tests_mode:
+                    feedback = self._contract_check() or self._turn_hooks()
                 if feedback:
                     messages.append({"role": "assistant", "content": text or ""})
                     messages.append({"role": "user", "content": feedback})
@@ -423,6 +443,12 @@ class Agent:
     def _watch(self, call, result):
         """After a tool call: count trouble (failing tests and checks) and look for loops. Returns guard.py's verdict."""
         name, text = call["name"], result.text or ""
+        if self.contract and name in ("run_shell", "run_python", "run_javascript", "manage_path"):
+            undone = self.contract.tampered()
+            if undone:
+                self.emit({"type": "notice", "text": "Put back the approved tests that were changed: " + ", ".join(undone)})
+                return ("nudge", "[Scorpi] That changed approved tests (%s); they were put back. Make the code pass them as they "
+                                 "are, or call propose_test_change if one is truly wrong." % ", ".join(undone))
         if name == "run_tests":
             self.trouble = 0 if result.ok else self.trouble + 1
         elif name in ("edit_file", "write_file", "apply_patch", "check_code") and ("PROBLEMS FOUND" in text or (name == "check_code" and not result.ok)):
@@ -605,6 +631,12 @@ class Agent:
         started = time.time()
         if not entry:
             result = Result("Unknown tool %r. Use enable_tools to load more tools." % name, ok=False)
+        elif self.tests_mode and name in C.EDIT_TOOLS and not all(C.is_test_file(t, self.workdir) for t in C.targets(name, args, self.workdir)):
+            result = Result("Tests first: only test files may change until the user approves the tests. Write the tests, run "
+                            "them (they must fail) and call submit_tests.", ok=False)
+        elif self.contract and name in C.EDIT_TOOLS and any(self.contract.locked(t) for t in C.targets(name, args, self.workdir)):
+            result = Result("That file is one of the tests the user approved (the contract), so it cannot change. Make the code "
+                            "pass it; if the test itself is wrong, call propose_test_change with your reason.", ok=False)
         elif toolcalls.unreadable(args):
             result = Result("Error: your arguments for %s could not be read as JSON. Call it again with one valid JSON object "
                             "(double quotes, escaped newlines). You sent: %s" % (name, args["_raw"][:300]), ok=False)
@@ -675,6 +707,28 @@ class Agent:
             return ""
         self.emit({"type": "notice", "text": "A hook stopped a command: %s" % hooks.label(failed[0])})
         return "A hook of the user's stopped this command:\n%s\nDo it differently, or tell the user why it is needed." % hooks.summary(failed)
+
+    def _contract_check(self):
+        """Before finishing with approved tests: they must pass. Returns a message sending the agent back, or ""."""
+        deal = self.contract
+        if not deal or self.depth or self.contract_passed:
+            return ""
+        undone = deal.tampered()
+        if undone:
+            self.emit({"type": "notice", "text": "Put back the approved tests that were changed: " + ", ".join(undone)})
+        self.emit({"type": "status", "text": "Running the approved tests"})
+        result = self._invoke(TOOLS["run_tests"], {"command": deal.command})
+        if result.ok:
+            self.contract_passed = True
+            self.emit({"type": "notice", "text": "The approved tests pass."})
+            return ""
+        deal.rounds += 1
+        if deal.rounds > 3:
+            self.emit({"type": "notice", "text": "The approved tests still fail after three more rounds; stopping here."})
+            return ""
+        self.emit({"type": "notice", "text": "The approved tests still fail, so the work goes on."})
+        return ("[Scorpi] Not done yet: the approved tests still fail.\n%s\nKeep working until they pass, without changing them."
+                % (result.text or "")[-3000:])
 
     def _turn_hooks(self):
         """after_turn hooks when the agent is about to finish in a project: a message sending it back to work when a

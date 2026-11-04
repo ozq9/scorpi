@@ -121,13 +121,16 @@ function planBlock(job) {
   const a = job.approval;
   const body = h('div.jp-plan.md');
   body.innerHTML = renderMarkdown(a.plan);
+  const w = { tests: ['check', ' wrote tests to approve: ', 'they fail for now; approved, they become the contract', 'Read the tests', 'Approve tests & build'],
+    test_change: ['edit', ' wants to change an approved test: ', 'read why', 'Read the change', 'Allow the change'] }[a.kind]
+    || ['route', ' proposes a plan: ', 'review it before anything changes', 'Read the plan', 'Approve & build'];
   return h(
     'div.job-approval.plan',
     { dataset: { approval: a.id } },
-    icon('route'),
-    h('div.ja-text', h('b', job.agent_name + ' proposes a plan: '), a.title && a.title !== 'Review the plan' ? a.title : 'review it before anything changes'),
-    h('details.ja-plan', h('summary', 'Read the plan'), body),
-    h('button.btn.small.accent', { onclick: () => decide(a.id, 'allow') }, icon('check'), 'Approve & build'),
+    icon(w[0]),
+    h('div.ja-text', h('b', job.agent_name + w[1]), a.title && !/^(Review the (plan|tests)|Change an approved test\?)$/.test(a.title) ? a.title : w[2]),
+    h('details.ja-plan', h('summary', w[3]), body),
+    h('button.btn.small.accent', { onclick: () => decide(a.id, 'allow') }, icon('check'), w[4]),
     h('button.btn.small.quiet', { onclick: () => planChanges(job) }, 'Changes…'),
   );
 }

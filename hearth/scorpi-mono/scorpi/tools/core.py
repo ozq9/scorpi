@@ -155,6 +155,84 @@ def submit_plan(ctx, plan, title=""):
 
 
 @tool(
+    "submit_tests",
+    "TESTS-FIRST MODE ONLY: hand the failing tests you wrote to the user for review. They approve them as the contract "
+    "(then you build until they pass), ask for changes (you get their words) or reject them.",
+    {"files": "array: The test files you wrote or changed (paths)",
+     "command": "string: The exact command that runs these tests (e.g. python -m pytest tests/test_cart.py)",
+     "summary": "string: Markdown: what the tests check (cases, edge cases, errors) and why they fail now"},
+)
+def submit_tests(ctx, files, command, summary):
+    from .. import contract as C
+    from .. import events
+    agent = ctx.agent
+    if not getattr(agent, "tests_mode", False):
+        raise ToolError("You are not in tests-first mode: go ahead with the work.")
+    root = agent.workdir or os.getcwd()
+    files = [str(f) for f in (files if isinstance(files, list) else [files]) if str(f).strip()]
+    if not files:
+        raise ToolError("Name the test files in files.")
+    content = C.snapshot(files, root)
+    missing = [f for f in files if not any(os.path.normpath(os.path.join(root, f)) == os.path.normpath(os.path.join(root, r)) for r in content)]
+    if missing:
+        raise ToolError("These files do not exist: %s. Write them first." % ", ".join(missing))
+    not_tests = [r for r in content if not C.is_test_file(r)]
+    if not_tests:
+        raise ToolError("Only test files belong in the contract: %s." % ", ".join(not_tests))
+    command = str(command or "").strip()
+    if not command:
+        raise ToolError("Give the command that runs these tests.")
+    title = "Review the tests"
+    review = C.review_markdown(str(summary or ""), content, command)
+    if agent.run:
+        decision, note = events.request_approval(agent.run, "submit_tests", {"title": title},
+                                                 {"title": title, "plan": review, "kind": "tests"}, timeout=24 * 3600, with_note=True)
+    else:
+        decision, note = "allow", ""
+    if decision in ("allow", "always"):
+        agent.tests_mode = False
+        agent.approved_tests = C.Contract(list(content), command, str(summary or ""), root, content).to_dict()
+        agent.stop_after_tools = True
+        agent.emit({"type": "tests_approved", "contract": agent.approved_tests, "note": note})
+        return Result("The user approved the tests%s. Stop here with one short sentence; building starts right after."
+                      % ((" with this note: %s" % note) if note else ""), display={"type": "plan", "steps": [{"title": "Tests approved: " + ", ".join(sorted(content)), "status": "done"}]})
+    if note:
+        return Result("The user wants changes to the tests before approving:\n%s\nRevise them, run them (they must fail for the "
+                      "right reason) and call submit_tests again." % note, ok=False)
+    agent.stop_after_tools = True
+    return Result("The user rejected the tests. Stop, and say in one or two sentences what you would need to write them differently.", ok=False)
+
+
+@tool(
+    "propose_test_change",
+    "Ask the user to change one of the approved tests (the contract). Only when the test itself is wrong, not to make "
+    "failing code pass. The user sees your reason and the new content and decides.",
+    {"path": "string: The approved test file", "content": "string: Its complete new content", "why": "string: Why the approved test is wrong"},
+)
+def propose_test_change(ctx, path, content, why):
+    import difflib
+    from .. import events
+    agent = ctx.agent
+    deal = getattr(agent, "contract", None)
+    if not deal:
+        raise ToolError("There are no approved tests to change.")
+    root = deal.root
+    full = os.path.normpath(path if os.path.isabs(path) else os.path.join(root, path))
+    if not deal.locked(full):
+        raise ToolError("%s is not one of the approved tests; you may change it normally." % path)
+    rel = os.path.relpath(full, root).replace("\\", "/")
+    diff = "\n".join(difflib.unified_diff(deal.content[rel].splitlines(), str(content).splitlines(), "a/" + rel, "b/" + rel, lineterm=""))
+    review = "**Why:** %s\n\n```diff\n%s\n```" % (str(why or "").strip(), diff[:12000])
+    decision, note = (events.request_approval(agent.run, "propose_test_change", {"path": rel},
+                                              {"title": "Change an approved test?", "plan": review, "kind": "test_change"},
+                                              timeout=24 * 3600, with_note=True) if agent.run else ("deny", ""))
+    if decision in ("allow", "always"):
+        deal.amend(rel, str(content))
+        return Result("The user agreed: %s is changed and is part of the contract now.%s" % (rel, (" Their note: " + note) if note else ""))
+    return Result("The user kept the approved test as it is%s. Make the code satisfy it." % ((": " + note) if note else ""), ok=False)
+
+
+@tool(
     "send_notification",
     "Send an alert to the user: shows in the app on every device, as a desktop notification on the host, "
     "and as a phone push via ntfy if configured.",

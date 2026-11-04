@@ -139,6 +139,7 @@ const composer = {
   editFrom: null,
   io: 'write', // 'write' or 'voice'
   plan: false, // a coding project's next message: the agent proposes a plan to approve before it changes anything
+  tests: false, // ... or writes failing tests to approve, then builds until they pass (tests first)
 };
 let live = null; // active TurnView
 let controller = null;
@@ -943,7 +944,14 @@ function speakButton(text) {
   return btn;
 }
 
-// The coder's plan, to approve, change in words, or reject (plan mode, Antigravity-style review).
+// What a review card says: a plan, the tests of tests-first mode, or a change to an approved test.
+const REVIEW_WORDS = {
+  plan: { icon: 'route', title: 'Review the plan', sub: 'Nothing has changed yet. Approve to start building, or say what to change.', ok: 'Approve & build' },
+  tests: { icon: 'check', title: 'Review the tests', sub: 'Only tests were written, and they fail for now. Approve them as the contract: the agent then builds until they pass and cannot change them without asking.', ok: 'Approve tests & build' },
+  test_change: { icon: 'edit', title: 'Change an approved test?', sub: 'The agent thinks this approved test is wrong. Allow the change, or keep the test as it is.', ok: 'Allow the change' },
+};
+
+// The coder's plan (or tests), to approve, change in words, or reject (plan mode, Antigravity-style review).
 function planCard(ev) {
   const sum = ev.summary || {};
   const result = h('div.ap-result');
@@ -961,14 +969,15 @@ function planCard(ev) {
   };
   const body = h('div.plan-body.md');
   body.innerHTML = renderMarkdown(sum.plan || '');
+  const words = REVIEW_WORDS[sum.kind] || REVIEW_WORDS.plan;
   const card = h(
     'div.approval.plan-review',
     { dataset: { approval: ev.id } },
-    h('div.ap-head', icon('route'), sum.title || 'Review the plan'),
-    h('div.ap-sub', 'Nothing has changed yet. Approve to start building, or say what to change.'),
+    h('div.ap-head', icon(words.icon), sum.title || words.title),
+    h('div.ap-sub', words.sub),
     body,
     h('div.ap-actions.col', note, h('div.ap-actions',
-      h('button.btn.primary.small', { onclick: () => decide('allow') }, icon('check'), 'Approve & build'),
+      h('button.btn.primary.small', { onclick: () => decide('allow') }, icon('check'), words.ok),
       h('button.btn.small', { onclick: () => (note.value.trim() ? decide('deny') : (note.focus(), toast('Write what should change first', 'warn'))) }, icon('edit'), 'Request changes'),
       h('button.btn.quiet.small', { onclick: () => decide('deny') }, 'Reject'),
     )),
@@ -978,7 +987,7 @@ function planCard(ev) {
 }
 
 function approvalCard(ev) {
-  if (ev.tool === 'submit_plan') return planCard(ev);
+  if (['submit_plan', 'submit_tests', 'propose_test_change'].includes(ev.tool)) return planCard(ev);
   const sum = ev.summary || {};
   const args = sum.args || ev.args || {};
   const pretty = args.command || args.code || JSON.stringify(args, null, 2);
@@ -1386,9 +1395,9 @@ export async function send(textOverride, opts = {}) {
     clear(els.messages);
   }
   const project = state.project;
-  const planNext = composer.plan && agentConversation();
-  if (composer.plan) {
-    composer.plan = false;
+  const firstMode = agentConversation() ? (composer.plan ? 'plan' : composer.tests ? 'tests' : '') : '';
+  if (composer.plan || composer.tests) {
+    composer.plan = composer.tests = false;
     updateModeChip();
   }
   const userMsg = { id: 'local-' + Date.now(), content: opts.display || body, data: { attachments, command: opts.command || '' } };
@@ -1413,7 +1422,7 @@ export async function send(textOverride, opts = {}) {
     await streamJSON('/api/chat', {
       body: {
         conversation_id: state.activeId, text: body, display: opts.display || '', command: opts.command || '', attachments, skill, groups: composer.groups, model: state.chatModel || '',
-        project: project ? project.slug : '', title: project ? project.name : '', device: deviceId(), mode: planNext ? 'plan' : '',
+        project: project ? project.slug : '', title: project ? project.name : '', device: deviceId(), mode: firstMode,
       },
       signal: controller.signal,
       onEvent: (ev) => {
@@ -1593,9 +1602,9 @@ function updateModeChip() {
   els.modeBtn.classList.toggle('hidden', !show);
   if (!show) return;
   const level = AUTONOMY.find(([k]) => k === (state.settings && state.settings.autonomy)) || AUTONOMY[1];
-  els.modeLabel.textContent = composer.plan ? 'Plan first' : level[1];
-  els.modeBtn.classList.toggle('set', composer.plan || level[0] !== 'auto');
-  els.modeBtn.querySelector('use').setAttribute('href', '#i-' + (composer.plan ? 'route' : level[2]));
+  els.modeLabel.textContent = composer.plan ? 'Plan first' : composer.tests ? 'Tests first' : level[1];
+  els.modeBtn.classList.toggle('set', composer.plan || composer.tests || level[0] !== 'auto');
+  els.modeBtn.querySelector('use').setAttribute('href', '#i-' + (composer.plan ? 'route' : composer.tests ? 'check' : level[2]));
 }
 
 async function setAutonomy(value) {
@@ -1613,18 +1622,24 @@ function modeMenu() {
   const current = (state.settings && state.settings.autonomy) || 'auto';
   composerMenu('mode', '', [
     { name: 'Plan first', desc: 'Next message: approve a plan before anything is built.', icon: 'route', checked: composer.plan,
-      onPick: () => { composer.plan = !composer.plan; updateModeChip(); } },
+      onPick: () => { composer.plan = !composer.plan; composer.tests = false; updateModeChip(); } },
+    { name: 'Tests first', desc: 'Next message: approve the tests, then it builds until they pass.', icon: 'check', checked: composer.tests,
+      onPick: () => { composer.tests = !composer.tests; composer.plan = false; updateModeChip(); } },
     state.project ? { name: 'Try several models', desc: 'Each model does it in a copy; keep the best one.', icon: 'bolt', onPick: () => startAttempts(els.input.value.trim()) } : null,
     'sep',
     ...AUTONOMY.map(([key, name, ic, desc]) => ({ name, desc, icon: ic, checked: current === key, onPick: () => setAutonomy(key) })),
   ]);
 }
 
-/** Shift+Tab: Auto → Plan first → Full auto → Ask first → Auto. */
+/** Shift+Tab: Auto → Plan first → Tests first → Full auto → Ask first → Auto. */
 function cycleMode() {
   const current = (state.settings && state.settings.autonomy) || 'auto';
   if (composer.plan) {
     composer.plan = false;
+    composer.tests = true;
+    updateModeChip();
+  } else if (composer.tests) {
+    composer.tests = false;
     setAutonomy('full');
   } else if (current === 'auto') {
     composer.plan = true;
@@ -1966,6 +1981,7 @@ let slashItems = [];
 let codeCommands = [];
 const LOCAL_CODE_COMMANDS = [
   { name: 'plan', description: 'Your next message: see a plan to approve before anything is built', icon: 'route' },
+  { name: 'tdd', description: 'Tests first: approve the tests, then it builds until they pass', icon: 'check' },
   { name: 'undo', description: 'Undo the last agent run: the files go back to how they were before it', icon: 'history' },
   { name: 'try', description: 'Try with several models at once, each in a copy; keep the best', icon: 'bolt' },
 ];
@@ -2084,8 +2100,14 @@ function pickSlash(i) {
     els.input.value = '';
     if (s.id === 'plan') {
       composer.plan = true;
+      composer.tests = false;
       updateModeChip();
       toast('Plan first', { body: 'Describe what to build: the agent shows a plan to approve before it changes anything.', timeout: 2600 });
+    } else if (s.id === 'tdd') {
+      composer.tests = true;
+      composer.plan = false;
+      updateModeChip();
+      toast('Tests first', { body: 'Describe what to build: the agent writes tests for you to approve, then builds until they pass.', timeout: 2600 });
     } else if (s.id === 'undo') {
       undoLastRun();
     } else if (s.id === 'try') {

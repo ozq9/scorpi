@@ -505,8 +505,9 @@ function agentsNode() {
   ];
   if (job.approval && job.approval.plan) {
     // plan mode: the plan is in the chat to read and comment on; approve it here too
-    nodes.push(h('div.pa-ask.plan', icon('route'), h('div.grow', h('b', 'Plan ready: '), job.approval.title || 'review it in the chat'),
-      h('button.btn.small.primary', { onclick: () => decide(job.approval.id, 'allow') }, icon('check'), 'Approve & build'),
+    const tests = job.approval.kind === 'tests';
+    nodes.push(h('div.pa-ask.plan', icon(tests ? 'check' : 'route'), h('div.grow', h('b', tests ? 'Tests ready: ' : 'Plan ready: '), job.approval.title || 'review it in the chat'),
+      h('button.btn.small.primary', { onclick: () => decide(job.approval.id, 'allow') }, icon('check'), tests ? 'Approve tests & build' : 'Approve & build'),
       h('button.btn.small.quiet', { title: 'Write what should change in the plan card in the chat', onclick: () => {
         const card = document.querySelector(`.plan-review[data-approval="${job.approval.id}"]`);
         if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); const note = card.querySelector('.plan-note'); if (note) note.focus(); }
@@ -518,6 +519,11 @@ function agentsNode() {
       h('button.btn.small.quiet', { onclick: () => decide(job.approval.id, 'deny') }, 'Deny')));
   }
   if (job.question) nodes.push(h('div.pa-ask', icon('chat'), h('div.grow', h('b', 'Asks: '), job.question.title || 'a question'), h('span.muted.small', 'Answer in the chat')));
+  if ((job.contract || []).length) {
+    nodes.push(h('div.pc-sec', h('div.pa-h', 'Approved tests', h('span.count', String(job.contract.length))),
+      h('div.muted.small', 'The contract: the agent builds until these pass and cannot change them without asking.'),
+      h('ul.pa-contract', job.contract.map((f) => h('li', icon('lock'), h('span.mono', f))))));
+  }
   if (plan.length) {
     nodes.push(h('div.pc-sec', h('div.pa-h', 'Plan', h('span.count', `${job.steps_done}/${plan.length}`)),
       h('ol.pa-plan', plan.map((s) => h('li.' + s.status, h('span.mk.' + (MARK[s.status] || 'pending')), h('span', s.title))))));
