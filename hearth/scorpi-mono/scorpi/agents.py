@@ -10,7 +10,7 @@ import time
 import traceback
 import unicodedata
 
-from . import db, events, gitops, limits, llm, notify, opencode, scheduler, scores
+from . import db, events, gitops, limits, llm, notify, opencode, privacy, scheduler, scores
 from .config import DATA_DIR, SETTINGS, WORKSPACE
 
 PROJECTS = os.path.join(WORKSPACE, "projects")
@@ -262,7 +262,8 @@ class Job:
         house = project_rules(self.workdir)
         if house:
             instructions += "\n\nThis project's own instructions (%s), follow them:\n%s" % house
-        return {"persona": {"name": a["name"], "instructions": instructions, "workdir": self.workdir, "project": self.project},
+        return {"persona": {"name": a["name"], "instructions": instructions, "workdir": self.workdir, "project": self.project,
+                            "private": privacy.project_private(self.project or self.attempt_of)},
                 "max_steps": int(a.get("max_steps") or 40), "auto_approve": bool(a.get("auto_approve")),
                 "pin_model": self.model or a.get("model") or ""}
 
@@ -300,7 +301,8 @@ class Job:
         if self.workdir and self.project and SETTINGS.get("checkpoints", True):
             # the files as they are before the agent touches them: Changes shows the run's diff, and it can be undone
             self.checkpoint = gitops.snapshot(self.project, self.workdir, "Before: %s — %s" % (self.title, _first_line(prompt)[:120]))
-        if self.workdir and opencode.use_for(self.agent) and not plan:
+        private = privacy.project_private(self.project or self.attempt_of) or SETTINGS.get("private_mode")
+        if self.workdir and opencode.use_for(self.agent) and not plan and not private:  # private work stays on Scorpi's own engine
             agent = dict(self.agent, model=self.model) if self.model else self.agent
             run = opencode.start(self.conv_id, prompt, agent, self.workdir, session=self.oc_session, on_session=self._on_session,
                                  title=self.title, system=system, display=display)
@@ -487,7 +489,8 @@ class Job:
         if not db.get_conversation(self.parent_conv):
             return
         note = "%s · %s" % (self.agent["name"], self.title)
-        if not llm.default_model():
+        if not llm.default_model() or privacy.project_private(self.project):
+            # (a private project's report is not handed to the chat model, which may not be private)
             text = "**%s** %s.\n\n%s" % (self.agent["name"], "finished" if self.status == "done" else "failed", self.result[:3000] or self.error)
             db.add_message(self.parent_conv, "assistant", text, {"parts": [], "note_for": note})
             events.publish("conversation", {"id": self.parent_conv})
@@ -912,6 +915,7 @@ def projects():
         j = latest.get(name)
         out.append({"slug": name, "name": (j or {}).get("title") or name.replace("-", " ").capitalize(), "path": path, "files": files,
                     "updated": max(newest, (j or {}).get("updated") or 0), "job": j, "linked": name in linked,
+                    "private": privacy.project_private(name),
                     "git": gitops.is_repo(path), "has_index": os.path.isfile(os.path.join(path, "index.html"))})
     out.sort(key=lambda p: -p["updated"])
     out.sort(key=lambda p: (p["job"] or {}).get("status") != "running")  # stable: working projects first, then by activity

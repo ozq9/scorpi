@@ -16,7 +16,7 @@ import urllib.request
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
-from . import limits, toolcalls, usage
+from . import limits, privacy, toolcalls, usage
 from . import providers as P
 from .config import SETTINGS
 
@@ -94,10 +94,12 @@ def cloud_enabled(pid):
 
 
 def cloud_order():
-    """Enabled providers, keyed ones first (catalog order), keyless anonymous access last."""
+    """Enabled providers, keyed ones first (catalog order), keyless anonymous access last. Private work (privacy.py)
+    only gets providers that say they don't train on what they are sent."""
     keyed = [p["id"] for p in P.PROVIDERS if _cloud_key(p["id"])]
     anon = [p["id"] for p in P.PROVIDERS if p["id"] not in keyed and cloud_enabled(p["id"])]
-    return keyed + anon
+    order = keyed + anon
+    return [pid for pid in order if privacy.allowed(pid)] if privacy.active() else order
 
 
 _active_variant = {}  # provider id -> index into _variants() that last listed models successfully
@@ -395,7 +397,7 @@ def cloud_overview(refresh=False):
             "stt": bool(prov.get("stt")), "embed": prov.get("embed", ""), "error": error, "category": prov.get("category", "free"),
             "url": _variant(prov["id"])["url"] if prov["id"] in enabled else prov.get("url", ""), "default_url": prov.get("url", ""),
             "account": prov.get("account", ""), "account_set": bool(_cloud_account(prov["id"])),
-            "resting": limits.for_provider(prov["id"]),
+            "resting": limits.for_provider(prov["id"]), "data": privacy.data_use(prov["id"]),
             "extra": (SETTINGS["cloud_extra_models"] or {}).get(prov["id"], ""),
             "models": [dict(m, name=cloud_ref(prov["id"], m["id"])) for m in models],
         })
@@ -782,6 +784,15 @@ def chat_stream(model, messages, tools=None, options=None, cancelled=lambda: Fal
     tried, waited = [], False
     same_tried = False
     fallback = SETTINGS["cloud_fallback"] and not getattr(_pin, "on", False)
+    if is_cloud(model) and privacy.active() and not privacy.allowed(split_cloud(model)[0]):
+        # private work never goes to a provider that may train on it
+        alt = pick_model(need) or _local_fallback(need, always=True)
+        if not alt:
+            raise LLMError("This work is private, and none of your model providers says it keeps data out of training. Add one "
+                           "marked \"No training\" in Connections → Model (Groq, Cloudflare, OVHcloud, Ollama Cloud...) or a local model.")
+        yield {"type": "switch", "model": alt, "text": "Private work: using %s instead of %s, which may train on what it is sent."
+               % (_label(alt), _label(model))}
+        model = alt
     if fallback and is_cloud(model):
         now = time.time()
         if _slow_models.get(model, 0) > now:
@@ -872,6 +883,8 @@ def chat_stream(model, messages, tools=None, options=None, cancelled=lambda: Fal
 
 
 def _route_stream(model, messages, tools, options, cancelled):
+    if is_cloud(model):
+        messages, _ = privacy.outgoing(messages)  # API keys, tokens and passwords never leave the PC
     endpoint = _endpoint(model, messages=messages)
     if endpoint is None:
         yield from _ollama_stream(model, messages, tools, options, cancelled)
@@ -908,9 +921,10 @@ def provider_name(pid):
     return (P.BY_ID.get(pid) or P.RETIRED.get(pid) or {}).get("name") or pid
 
 
-def _local_fallback(need):
-    """A local model (Ollama) with the needed abilities, for when every cloud model is out of requests."""
-    if not SETTINGS.get("local_fallback", True) or SETTINGS["provider"] != "ollama":
+def _local_fallback(need, always=False):
+    """A local model (Ollama) with the needed abilities, for when every cloud model is out of requests (or none may be
+    used: private work)."""
+    if not (always or SETTINGS.get("local_fallback", True)) or SETTINGS["provider"] != "ollama":
         return ""
     try:
         names = [m.get("name") or "" for m in _local_models(timeout=3)]

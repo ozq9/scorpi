@@ -22,7 +22,7 @@ const TABS = [
   ['terminal', 'Terminal', 'terminal'],
   ['github', 'GitHub', 'branch'],
 ];
-const STATUS = { running: ['working', '.warn'], done: ['done', '.ok'], failed: ['failed', '.err'], stopped: ['stopped', ''], interrupted: ['paused', ''] };
+const STATUS = { running: ['working', '.warn'], waiting: ['paused', '.warn'], done: ['done', '.ok'], failed: ['failed', '.err'], stopped: ['stopped', ''], interrupted: ['paused', ''] };
 const MARK = { running: 'active', active: 'active', done: 'done', failed: 'failed', stopped: 'pending', interrupted: 'pending', pending: 'pending' };
 const IMAGES = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp'];
 // shown as they look rather than as source (web pages keep their source view: that's what a coder reads)
@@ -327,7 +327,8 @@ function renderStrip() {
     ...[
       h('div.pp-name', h('span.pp-title', { title: data.path }, data.name), h('span.badge' + cls, job && job.status === 'running' && (job.approval || job.question) ? 'needs you' : label),
         job && job.model ? h('span.badge', { title: job.model }, shortModel(job.model)) : null,
-        data.linked ? h('span.badge', { title: 'A folder of your own: ' + data.path }, 'linked') : null),
+        data.linked ? h('span.badge', { title: 'A folder of your own: ' + data.path }, 'linked') : null,
+        data.private || data.private_mode ? h('span.badge.ok', { title: 'Only providers that say they don\'t train on your data (or local models) work on it' }, icon('lock'), ' private') : null),
       h('div.pp-now', job && job.status === 'running' ? h('span.job-pulse') : null, h('span', job ? job.activity || '' : 'Tell the agent what to build.')),
       job && job.steps_total ? h('div.job-progress', h('div.jp-bar', h('i', { style: { width: pct + '%' } })), h('span.jp-text', `${job.steps_done}/${job.steps_total}`)) : null,
     ].filter(Boolean),
@@ -441,9 +442,24 @@ function moreMenu(e) {
     { label: 'Open a terminal window', icon: 'terminal', onClick: open('terminal', 'Opening a terminal…') },
     { label: 'Show the folder', icon: 'folder', onClick: open('folder', 'Opened the project folder on the PC') },
     { label: 'Copy the path', icon: 'copy', sub: data.path, onClick: () => copyText(data.path).then(() => toast('Path copied', { timeout: 1400 })) },
+    'sep',
+    data.private
+      ? { label: 'Make it a normal project', icon: 'lock', sub: 'Any of your models may work on it again', onClick: () => setPrivate(false) }
+      : { label: 'Make it private', icon: 'lock', sub: 'Only providers that don\'t train on your data, or local models', onClick: () => setPrivate(true) },
     data.linked ? 'sep' : null,
     data.linked ? { label: 'Remove from Scorpi', icon: 'x', sub: 'The folder and its files stay', danger: true, onClick: unlink } : null,
   ], { align: 'end' });
+}
+
+async function setPrivate(on) {
+  try {
+    await api.post(`/api/projects/${data.slug}/privacy`, { private: on });
+    data.private = on;
+    renderStrip();
+    toast(on ? 'Private: its agents only use providers marked No training, or local models' : 'No longer private', { timeout: 3000 });
+  } catch (err) {
+    toast(err.message, 'error');
+  }
 }
 
 async function unlink() {

@@ -145,6 +145,35 @@ async function model(body) {
     data.providers.forEach((p, i) => boxFor(p).appendChild(providerTile(p, i)));
   }
 
+  // What the provider says it does with what you send (scorpi/privacy.py), and whether private work may use it.
+  function dataBadge(p) {
+    const d = p.data || {};
+    const text = { 'no-train': 'No training', 'no-retain': 'Keeps nothing', 'may-train': 'May train on prompts', mixed: 'Depends on model' }[d.kind] || 'Data use unclear';
+    const cls = d.kind === 'no-train' || d.kind === 'no-retain' ? '.ok' : d.kind === 'may-train' ? '.warn' : '';
+    return h('button.badge.data-badge' + cls, { type: 'button', title: d.note + (d.checked ? ' (as stated in its terms, checked ' + d.checked + ')' : ''), onclick: () => dataSheet(p) }, icon(d.private_ok ? 'lock' : 'eye'), text);
+  }
+
+  function dataSheet(p) {
+    const d = p.data || {};
+    const safe = d.kind === 'no-train' || d.kind === 'no-retain';
+    const trusted = new Set(state.settings.privacy_trusted || []);
+    sheet({
+      title: p.name + ' and your data',
+      body: h('div',
+        h('p.section-desc', d.note),
+        h('p.hint', `As the provider states it in its terms (checked ${d.checked || 'recently'}). Free tiers often differ from paid ones; check its terms before sending anything sensitive.`),
+        safe ? h('p', icon('lock'), ' Private projects and private mode may use it.')
+          : h('label.list-row', { style: { cursor: 'pointer' } },
+              h('div.lr-main', h('div.lr-title', 'Allow it for private work'), h('div.lr-sub', 'Only if you have opted out of training in your account there, or accept its terms.')),
+              switchEl(trusted.has(p.id), async (on) => {
+                on ? trusted.add(p.id) : trusted.delete(p.id);
+                await saveSettings({ privacy_trusted: [...trusted] });
+                refreshAll();
+              }))),
+      foot: (close) => [h('button.btn.primary', { onclick: close }, 'Done')],
+    });
+  }
+
   // A provider that hit its usage limit: Scorpi uses other models until it resets (scorpi/limits.py).
   function restingNote(p) {
     const r = p.resting;
@@ -191,7 +220,7 @@ async function model(body) {
       { style: { animationDelay: i * 30 + 'ms' } },
       h('div.t-kicker', icon(coding ? 'code' : credits ? 'spark' : 'globe'), p.keyless ? 'no signup needed' : coding ? 'plan / API key' : credits ? 'free credit' : 'free key'),
       h('div.t-name', p.name),
-      h('div.row', { style: { gap: '6px', flexWrap: 'wrap', margin: '2px 0 8px' } }, badge, p.stt ? h('span.badge', 'speech to text') : null),
+      h('div.row', { style: { gap: '6px', flexWrap: 'wrap', margin: '2px 0 8px' } }, badge, p.stt ? h('span.badge', 'speech to text') : null, dataBadge(p)),
       h('div.t-desc', p.about),
       p.resting ? restingNote(p) : null,
       p.error ? h('div.hint', { style: { color: 'var(--danger)', fontSize: '12px', marginTop: '8px', wordBreak: 'break-word' } }, p.error) : null,
@@ -282,6 +311,8 @@ async function model(body) {
       h('div.panel', { style: { marginTop: '14px' } },
         switchRow('Continue by itself after usage limits', 'When every model is at its limit, work pauses and carries on when the first one resets.', s.auto_resume !== false, (v) => saveSettings({ auto_resume: v })),
         switchRow('Use a local model when the cloud runs out', 'With Ollama installed, work continues on a local model instead of waiting.', s.local_fallback !== false, (v) => saveSettings({ local_fallback: v })),
+        switchRow('Private mode', 'Everything only goes to providers that say they don\'t train on what they are sent (marked No training), or to local models. Single projects can be private on their own.', !!s.private_mode, (v) => saveSettings({ private_mode: v })),
+        switchRow('Keep secrets out of requests', 'API keys, tokens, private keys and passwords in .env files are replaced by placeholders before anything goes to a cloud model; the agent can still use them in files and commands.', s.redact_secrets !== false, (v) => saveSettings({ redact_secrets: v })),
       ),
     );
     if (!models.length) list.appendChild(h('div.list-row', h('span.f-ic', icon('cpu')), h('div.lr-main', h('div.lr-title', 'No local models'), h('div.lr-sub', cloud.length ? `${cloud.length} cloud models available above.` : 'Optional: install Ollama to run models offline.'))));

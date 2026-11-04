@@ -11,7 +11,7 @@ import threading
 import time
 import traceback
 
-from . import db, events, hooks, limits, llm, safety, scores, toolcalls, usage
+from . import db, events, hooks, limits, llm, privacy, safety, scores, toolcalls, usage
 from .compact import Compactor
 from .guard import LoopGuard
 from .config import SETTINGS, UPLOADS, WORKSPACE
@@ -170,6 +170,8 @@ class Agent:
         self.trouble = 0  # failed test runs and checks since the last passing run
         self.escalations = 0
         self.ladder = []  # stronger models to move to when the work gets stuck (step routing)
+        # a private project: only providers that don't train on what they are sent, or local models (privacy.py)
+        self.private = privacy.project_private(self.project) or bool((persona or {}).get("private"))
         if depth == 0 and not pin_model and SETTINGS.get("step_routing", "smart") == "thrifty" and (skill == "code" or self.workdir):
             fast = llm.fast_model({"tools"})
             if fast and fast != self.model:
@@ -294,6 +296,10 @@ class Agent:
 
     def run_turn(self, history, user_text=""):
         """history: list of {'role','content','images'?}. Returns final assistant text."""
+        with privacy.scope(self.private):
+            return self._run_turn(history, user_text)
+
+    def _run_turn(self, history, user_text):
         caps = llm.capabilities(self.model)
         model = self.model
         has_images = any(m.get("images") for m in history[-2:])
@@ -590,7 +596,7 @@ class Agent:
 
     def execute(self, call, caps=()):
         name = call["name"]
-        args = call["arguments"] if isinstance(call["arguments"], dict) else {}
+        args = privacy.restore(call["arguments"]) if isinstance(call["arguments"], dict) else {}  # secrets hidden from the model go back in
         call_id = call["id"] + "-" + os.urandom(3).hex()
         entry = TOOLS.get(name)
         part = {"type": "tool", "id": call_id, "name": name, "args": args, "status": "running", "agent": self.label}
@@ -1004,6 +1010,7 @@ def run_subagent(parent_ctx, kind, task):
 
     sub = Agent(parent.run, model=parent.model, skill=spec["skill"], groups=spec["groups"] + ["core"], depth=parent.depth + 1, label=kind, emit=relay,
                 workdir=parent.workdir, project=parent.project)
+    sub.private = parent.private
     text = sub.run_turn([{"role": "user", "content": "You are the %s sub-agent. Complete this task and reply with a self-contained result "
                                                        "(facts, paths, sources) for the main assistant:\n\n%s" % (kind, task)}], task)
     parent.files.extend(sub.files)
@@ -1058,6 +1065,7 @@ def run_subagents(parent_ctx, tasks):
                     label=label, emit=relay, auto_approve=parent.auto_approve, max_steps=max(12, int(parent.max_steps or 24) // 2),
                     workdir=parent.workdir, project=parent.project)
         sub.model = parent.model  # same model as the job, also for coding work with its own coding model
+        sub.private = parent.private  # helpers run in threads of their own: they carry the job's privacy with them
         prompt = ("You are %s, one of several helper agents working IN PARALLEL on parts of one job. Do only your part; other "
                   "helpers handle the rest at the same time, so do not touch files outside your part.%s\n\nYour part:\n%s\n\n"
                   "When done, reply with a short self-contained report for the lead agent: what you did, files (full paths), "

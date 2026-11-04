@@ -720,3 +720,4 @@ a.gh-row:hover, .gh-row a.gh-title:hover { background: var(--fill-1); color: var
 .sb-pick { display: grid; gap: var(--s-3); margin-top: var(--s-5); max-height: 320px; overflow: auto; }
 .sb-pick-row { display: flex; align-items: center; gap: var(--s-5); padding: var(--s-4) var(--s-5); border-radius: var(--r-3); border: 1px solid var(--line); cursor: pointer; overflow-wrap: anywhere; }
 @media (max-width: 560px) { .sb-row { grid-template-columns: 28px minmax(0, 1fr); } .sb-score { grid-column: 2; justify-items: start; } }
+.pp-name .badge svg { width: 10px; height: 10px; }

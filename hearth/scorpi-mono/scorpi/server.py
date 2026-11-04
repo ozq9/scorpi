@@ -22,7 +22,7 @@ import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import VERSION, agent, agents, attempts, bench, coding, db, discord, events, gallery, github, gitops, knowledge, limits, llm, looks, music, notify, opencode, scheduler, scores, updates, usage, voice
+from . import VERSION, agent, agents, attempts, bench, coding, db, discord, events, gallery, github, gitops, knowledge, limits, llm, looks, music, notify, opencode, privacy, scheduler, scores, updates, usage, voice
 from .config import DATA_DIR, IS_WINDOWS, PUBLIC_DIR, SETTINGS, UPLOADS, WORKSPACE
 from .mcp import MANAGER, PRESETS
 from .tools import GROUPS, TOOLS, ToolError, catalog, check_access, module_available
@@ -575,7 +575,7 @@ def settings_set(h):
                     "tts_engine", "tts_voice", "desktop_notifications", "ntfy_topic", "auto_update", "update_url", "github_token", "checkpoints",
                     # a guest must not loosen what agents may do, nor point a provider at a server that would receive the key
                     "autonomy", "cloud_urls", "cloud_accounts", "cloud_extra_models", "code_model", "expert_model", "coder_backend", "hooks", "learn_models",
-                    "auto_resume", "local_fallback"):
+                    "auto_resume", "local_fallback", "private_mode", "privacy_trusted", "redact_secrets", "step_routing", "fast_model"):
             patch.pop(key, None)
         for key in [k for k in patch if k.startswith("key_") or k == "cloud_anon"]:
             patch.pop(key, None)
@@ -1880,7 +1880,8 @@ def project_get(h, folder):
     h.send_json({"slug": folder, "name": (latest or {}).get("title") or folder.replace("-", " ").capitalize(), "path": path,
                  "tree": agents.project_tree(folder), "jobs": jobs, "job": latest, "conv_id": (latest or {}).get("conv_id") or "",
                  "preview": preview_url(folder), "has_index": os.path.isfile(os.path.join(path, "index.html")),
-                 "linked": folder in agents.links(), "git": gitops.is_repo(path),
+                 "linked": folder in agents.links(), "git": gitops.is_repo(path), "private": privacy.project_private(folder),
+                 "private_mode": bool(SETTINGS.get("private_mode")),
                  "remote": github.parse_remote(gitops.remote_url(path)) if gitops.is_repo(path) and gitops.binary() else ""})
 
 
@@ -1956,7 +1957,8 @@ def _git_route(method, pattern):
             if path is None:
                 return None
             try:
-                return fn(h, path, folder, *rest)
+                with privacy.scope(privacy.project_private(folder)):  # a private project's reviews stay private too
+                    return fn(h, path, folder, *rest)
             except (gitops.GitError, github.GitHubError, ValueError) as exc:
                 return _fail(h, exc)
         route(method, "/api/projects/([a-z0-9-]+)" + pattern)(handler)
@@ -1969,6 +1971,17 @@ def _repo_of(path):
     if not full:
         raise gitops.GitError("This project is not on GitHub yet. Publish it first.")
     return full
+
+
+@_git_route("POST", "/privacy")
+def project_privacy(h, path, folder):
+    """Make a project private: its agents only use providers that don't train on what they are sent, or local models."""
+    if not h.is_owner:
+        return h.error("Only the owner of this PC can do that.", 403)
+    on = bool(h.body_json().get("private"))
+    privacy.set_project_private(folder, on)
+    events.publish("projects", {"slug": folder})
+    h.send_json({"private": on})
 
 
 @_git_route("GET", "/git")

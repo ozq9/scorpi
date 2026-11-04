@@ -47,6 +47,9 @@ DEFAULTS = {
     "learn_models": True,  # automatic coding picks favour the models that work best here (scorpi/scores.py)
     "step_routing": "smart",  # off | smart (side work on a fast model, stronger model when stuck) | thrifty (start fast, escalate)
     "fast_model": "",  # quick model for side work ("" = automatic)
+    "private_mode": False,  # everything only goes to providers that don't train on it, or local models (scorpi/privacy.py)
+    "privacy_trusted": [],  # providers the user allows for private work anyway (e.g. after opting out of training there)
+    "redact_secrets": True,  # API keys, tokens and passwords are replaced by placeholders before reaching a cloud model
     "cloud_urls": {},  # provider id -> base URL override
     "cloud_extra_models": {},  # provider id -> "model-a, model-b" offered in addition to the live list
     "cloud_accounts": {},  # provider id -> account id its URLs need (Cloudflare)
