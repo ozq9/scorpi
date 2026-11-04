@@ -10,7 +10,7 @@ import time
 import traceback
 import unicodedata
 
-from . import db, events, gitops, limits, llm, notify, opencode, scheduler
+from . import db, events, gitops, limits, llm, notify, opencode, scheduler, scores
 from .config import DATA_DIR, SETTINGS, WORKSPACE
 
 PROJECTS = os.path.join(WORKSPACE, "projects")
@@ -432,6 +432,11 @@ class Job:
             if sub.get("status") == "running":
                 sub.update(status="stopped", ended=time.time())
         self.updated = time.time()
+        if self.status != "stopped":
+            used = self.model_ref()
+            scores.record(used, "job_done" if self.status == "done" else "job_failed")
+            if self.status == "done" and self.workdir:
+                scores.record(used, "kept")  # until the user undoes it
         db.x("UPDATE tasks SET status=?, updated=?, result=? WHERE id=?", (self.status, self.updated, self.result[:8000], self.id))
         db.x("UPDATE agents SET last_status=? WHERE id=?", (self.status, self.agent["id"]))
         self.publish(force=True)

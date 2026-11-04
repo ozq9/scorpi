@@ -126,6 +126,19 @@ def _variant(pid):
 
 
 _session = threading.local()
+_pin = threading.local()
+
+
+@contextlib.contextmanager
+def pinned():
+    """Requests made inside stay on the model asked for: no switching to another one on a limit or an error
+    (the benchmark measures one model at a time)."""
+    previous = getattr(_pin, "on", False)
+    _pin.on = True
+    try:
+        yield
+    finally:
+        _pin.on = previous
 
 
 @contextlib.contextmanager
@@ -407,10 +420,12 @@ def pick_model(need=(), exclude_providers=(), exclude=()):
     return ""
 
 
-def pick_code_model(exclude=(), exclude_providers=()):
-    """The strongest coding model on offer: each provider's coding pick, in the order the user set providers up.
-    Used when the coding model is "auto" (paid plans come first, then free tiers, then free credits)."""
+def code_candidates(exclude=(), exclude_providers=()):
+    """Coding models on offer right now: each provider's coding pick in the order the user set providers up, plus
+    models that proved themselves here (scores.py). Resting and slow models are left out."""
+    from . import scores
     now = time.time()
+    picks, usable = [], set()
     for pid in cloud_order():
         if _slow.get(pid, 0) > now or pid in exclude_providers or limits.provider_resting(pid):
             continue
@@ -418,10 +433,26 @@ def pick_code_model(exclude=(), exclude_providers=()):
         models, _ = cloud_models(pid)
         eligible = [m for m in models if "tools" in m["caps"] and cloud_ref(pid, m["id"]) not in exclude
                     and _slow_models.get(cloud_ref(pid, m["id"]), 0) <= now and not limits.resting(cloud_ref(pid, m["id"]))]
+        usable.update(cloud_ref(pid, m["id"]) for m in eligible)
         pick = _prefer(eligible, prov.get("prefer_code") or prov["prefer"])
         if pick:
-            return cloud_ref(pid, pick["id"])
-    return ""
+            picks.append(cloud_ref(pid, pick["id"]))
+    proven = [r["model"] for r in scores.board() if r["model"] in usable and r["evidence"] >= scores.MIN_EVIDENCE and r["score"] >= 0.6]
+    return list(dict.fromkeys(picks + proven))
+
+
+def pick_code_model(exclude=(), exclude_providers=()):
+    """The strongest coding model on offer. Used when the coding model is "auto": paid plans come first (in the order
+    the user added them); among free tiers and credits, the models that work best here (scores.py) go first, then the
+    untried ones in catalog order."""
+    from . import scores
+    candidates = code_candidates(exclude, exclude_providers)
+    if not candidates:
+        return ""
+    if SETTINGS.get("learn_models", True):
+        paid = [c for c in candidates if P.BY_ID[split_cloud(c)[0]].get("category") == "coding"]
+        candidates = paid + scores.rank([c for c in candidates if c not in paid])
+    return candidates[0]
 
 
 def coding_model():
@@ -728,7 +759,8 @@ def chat_stream(model, messages, tools=None, options=None, cancelled=lambda: Fal
         need.add("vision")
     tried, waited = [], False
     same_tried = False
-    if SETTINGS["cloud_fallback"] and is_cloud(model):
+    fallback = SETTINGS["cloud_fallback"] and not getattr(_pin, "on", False)
+    if fallback and is_cloud(model):
         now = time.time()
         if _slow_models.get(model, 0) > now:
             alt = pick_same_provider(model, need, [model]) or pick_model(need, {split_cloud(model)[0]}, [model])
@@ -771,7 +803,7 @@ def chat_stream(model, messages, tools=None, options=None, cancelled=lambda: Fal
                 _slow_models[model] = time.time() + SLOW_COOLDOWN
             # a 404/410 usually means "this model is not enabled for this account" (NVIDIA lists models the key
             # cannot call). Try a working sibling from the same provider before leaving it.
-            if (not started and not same_tried and is_cloud(model) and SETTINGS["cloud_fallback"]
+            if (not started and not same_tried and is_cloud(model) and fallback
                     and exc.status in (404, 410, 408)):
                 alt = pick_same_provider(model, need, [*tried, model])
                 if alt and alt != model:
@@ -784,7 +816,7 @@ def chat_stream(model, messages, tools=None, options=None, cancelled=lambda: Fal
             if exc.status == 408 and is_cloud(model):
                 _slow[split_cloud(model)[0]] = time.time() + SLOW_COOLDOWN
             limited = not started and bool(limits.hit(model, exc))  # remembered: picks skip it until its limit resets
-            if started or not exc.retryable or not SETTINGS["cloud_fallback"] or cancelled():
+            if started or not exc.retryable or not fallback or cancelled():
                 raise
             tried.append(model)
             alt = pick_model(need, {split_cloud(m)[0] for m in tried if is_cloud(m)}, tried) or pick_model(need, (), tried)

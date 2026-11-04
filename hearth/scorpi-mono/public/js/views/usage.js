@@ -6,6 +6,7 @@ import { clear, h, icon } from '../lib/dom.js';
 import { field, seg, sheet, toast } from '../lib/ui.js';
 import { bus, state } from '../store.js';
 import { openRecap } from './recap.js';
+import { scoreboardSection } from './scoreboard.js';
 
 const RANGES = [['7', '7 days'], ['30', '30 days'], ['90', '90 days'], ['0', 'All time']];
 const KINDS = { local: 'local', free: 'free tier', plan: 'plan', paid: 'pay as you go', custom: 'own endpoint' };
@@ -239,6 +240,7 @@ function models(d) {
       tile('Tokens', fmtTokens(t.tokens), `${fmtTokens(t.input)} in · ${fmtTokens(t.output)} out · ${fmtTokens(t.cached)} cached`),
       tile('Spent', fmtCost(t.cost), t.cost ? 'estimated from prices' : 'local, free tiers and plans cost nothing extra'),
       tile('Model calls', t.calls.toLocaleString(), t.calls ? `${fmtTokens(t.tokens / t.calls)} tokens each on average` : '')),
+    scoreboardSection(),
     h('section.u-section', h('div.u-section-head', h('h2', 'Tokens per day'), h('span.muted', d.range ? `Last ${d.range} days` : `Last ${days} days`)),
       columns(series, { labelEvery: Math.ceil(series.length / 8), height: 150 })),
     h('section.u-section', h('div.u-section-head', h('h2', 'Models'), h('span.muted', 'Prices are estimates; click one to set the real price')), table,

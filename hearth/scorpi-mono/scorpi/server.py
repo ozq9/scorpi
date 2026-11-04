@@ -22,7 +22,7 @@ import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import VERSION, agent, agents, attempts, coding, db, discord, events, gallery, github, gitops, knowledge, limits, llm, looks, music, notify, opencode, scheduler, updates, usage, voice
+from . import VERSION, agent, agents, attempts, bench, coding, db, discord, events, gallery, github, gitops, knowledge, limits, llm, looks, music, notify, opencode, scheduler, scores, updates, usage, voice
 from .config import DATA_DIR, IS_WINDOWS, PUBLIC_DIR, SETTINGS, UPLOADS, WORKSPACE
 from .mcp import MANAGER, PRESETS
 from .tools import GROUPS, TOOLS, ToolError, catalog, check_access, module_available
@@ -574,7 +574,8 @@ def settings_set(h):
                     "discord_presence", "discord_client_id", "port", "https_port", "fish_api_key", "fish_model", "fish_voice",
                     "tts_engine", "tts_voice", "desktop_notifications", "ntfy_topic", "auto_update", "update_url", "github_token", "checkpoints",
                     # a guest must not loosen what agents may do, nor point a provider at a server that would receive the key
-                    "autonomy", "cloud_urls", "cloud_accounts", "cloud_extra_models", "code_model", "expert_model", "coder_backend", "hooks"):
+                    "autonomy", "cloud_urls", "cloud_accounts", "cloud_extra_models", "code_model", "expert_model", "coder_backend", "hooks", "learn_models",
+                    "auto_resume", "local_fallback"):
             patch.pop(key, None)
         for key in [k for k in patch if k.startswith("key_") or k == "cloud_anon"]:
             patch.pop(key, None)
@@ -1599,6 +1600,43 @@ def limits_clear(h):
     h.send_json(limits.overview())
 
 
+@route("GET", "/api/scores")
+def scores_get(h):
+    """The model scoreboard (what worked here), the benchmark's state and the models worth testing."""
+    try:
+        suggested = bench.suggest()
+    except Exception:  # noqa: BLE001 - a provider that cannot list models leaves the list shorter
+        suggested = []
+    h.send_json({"board": scores.board(), "bench": bench.status(), "suggested": [{"model": m, "label": llm.label(m)} for m in suggested],
+                 "tasks": [{"id": t["id"], "title": t["title"]} for t in bench.TASKS], "learn": bool(SETTINGS.get("learn_models", True)),
+                 "min_evidence": scores.MIN_EVIDENCE})
+
+
+@route("DELETE", "/api/scores")
+def scores_forget(h):
+    if not h.is_owner:
+        return h.error("Only the owner of this PC can do that.", 403)
+    scores.forget(str(h.query.get("model") or ""))
+    h.send_json({"ok": True})
+
+
+@route("POST", "/api/bench")
+def bench_start(h):
+    """Test models on the built-in coding tasks (they write and run code on this PC: the owner only)."""
+    if not h.is_owner:
+        return h.error("Only the owner of this PC can do that.", 403)
+    try:
+        h.send_json(bench.start(h.body_json().get("models") or []))
+    except ValueError as exc:
+        h.error(str(exc))
+
+
+@route("POST", "/api/bench/stop")
+def bench_stop(h):
+    bench.stop()
+    h.send_json(bench.status())
+
+
 @route("POST", "/api/limits/resume")
 def limits_resume(h):
     """A chat that waits for usage limits: continue now ("now": true) or not at all."""
@@ -2108,6 +2146,10 @@ def project_checkpoint_restore(h, path, folder, sha):
     if job and job.status == "running":
         raise gitops.GitError("The agent is still working on this project. Stop it first.")
     before = gitops.restore(folder, path, sha)
+    if job and job.checkpoint and job.checkpoint.startswith(sha[:7]) and job.status == "done":
+        # the user undid the agent's last run: it counts against the model that did it (scores.py)
+        scores.record(job.model_ref(), "undone")
+        scores.record(job.model_ref(), "kept", -1)
     events.publish("checkpoint", {"project": folder, "sha": sha})
     h.send_json({"ok": True, "undo": before})
 

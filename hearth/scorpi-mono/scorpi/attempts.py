@@ -11,7 +11,7 @@ import shutil
 import threading
 import time
 
-from . import agents, db, events, gitops, llm
+from . import agents, db, events, gitops, llm, scores
 from . import providers as P
 from .config import DATA_DIR
 
@@ -262,6 +262,9 @@ def apply(rid, n):
         shutil.copy2(os.path.join(attempt["dir"], rel), target)
     gitops.snapshot(slug, path, "After: applied try %d (%s)" % (attempt["n"], llm.label(attempt["model"])))
     _update(rid, lambda r: r.update(applied=attempt["n"]))
+    if not record.get("applied"):
+        for a in record["attempts"]:
+            scores.record(a["model"], "attempt_won" if a["n"] == attempt["n"] else "attempt_lost")
     events.publish("attempts", {"project": slug, "id": rid})
     events.publish("checkpoint", {"project": slug})
     return {"applied": attempt["n"], "files": len(changed)}

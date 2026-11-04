@@ -11,7 +11,7 @@ import threading
 import time
 import traceback
 
-from . import db, events, hooks, limits, llm, safety, usage
+from . import db, events, hooks, limits, llm, safety, scores, usage
 from .compact import Compactor
 from .config import SETTINGS, UPLOADS, WORKSPACE
 from .tools import TOOLS, Result, ToolError, base_dir, policy, schema_for, select_tools
@@ -163,6 +163,7 @@ class Agent:
         self.hook_rounds = 0  # times after_turn hooks sent the agent back to work this turn
         self.approved_plan = ""
         self.stop_after_tools = False  # a tool ended the turn (the plan was approved or rejected)
+        self.current = self.model  # the model answering right now (after switches): its tool calls count for it (scores.py)
 
     def emit(self, event):
         self._emit(event)
@@ -342,6 +343,7 @@ class Agent:
             if self.switched and self.switched != model:
                 model = self.switched  # keep using the model that took over after a rate limit
                 caps = llm.capabilities(model)
+            self.current = model
             if text.strip():
                 texts.append(text.strip())
             if not calls:
@@ -488,7 +490,9 @@ class Agent:
                                 "files inside the project) or ask the user to do it themselves." % why, ok=False)
             else:
                 allowed = True
-                if verdict == "ask" and self.run:
+                if verdict == "ask" and getattr(self.run, "unattended", False):
+                    allowed = False  # nobody watches this run (the benchmark): what would need approval is declined
+                elif verdict == "ask" and self.run:
                     summary = _describe(name, args)
                     if why:
                         summary["why"] = "This command %s." % why
@@ -507,6 +511,7 @@ class Agent:
                     result = self._invoke(entry, args)
         part.update({"status": "done" if result.ok else "error", "ok": result.ok, "result": (result.text or "")[:2000],
                      "display": result.display, "elapsed": round(time.time() - started, 2)})
+        scores.tool_result(self.current, name, result.ok, result.text)
         self.files.extend(result.files or [])
         self.emit({"type": "tool_end", "id": call_id, "name": name, "ok": result.ok, "result": (result.text or "")[:2000],
                    "display": result.display, "elapsed": part["elapsed"], "agent": self.label})
