@@ -15,6 +15,7 @@ Fields beyond the obvious ones:
   category        "coding" (plans and paid keys), "free" (lasting free tier) or "credits" (free credits at signup)
   resets          when daily limits reset: "utc" (default) or "pacific" (midnight US Pacific time, Google)
   limit_scope     "provider" when a daily limit counts for the whole account rather than per model (OpenRouter's free requests)
+  prefer_fast     patterns for a quick, light model for side work (summaries, titles, the first try in thrifty mode)
 """
 
 # Coding plans and pay-as-you-go keys. Listed first: when you pay for a plan it is preferred over free tiers.
@@ -150,6 +151,7 @@ FREE = [
         "prefer": [r"gpt-oss-120b", r"kimi-k2", r"qwen3", r"llama-4-maverick", r"llama-3\.3-70b", r"gpt-oss"],
         "prefer_code": [r"qwen3-coder", r"kimi-k2", r"gpt-oss-120b", r"qwen3", r"llama-3\.3-70b"],
         "prefer_vision": [r"llama-4-maverick", r"llama-4-scout", r"vision"],
+        "prefer_fast": [r"llama-3\.1-8b", r"gpt-oss-20b", r"qwen3-32b", r"llama-4-scout"],
         "stt": "whisper-large-v3-turbo",
     },
     {
@@ -161,6 +163,7 @@ FREE = [
         "prefer": [r"gemini-[\d.]+-flash$", r"gemini-flash-latest", r"gemini-.*flash(?!.*(lite|image|tts|live|audio))", r"flash"],
         "prefer_code": [r"gemini-[\d.]+-flash$", r"gemini-flash-latest", r"flash"],
         "prefer_vision": [r"gemini-[\d.]+-flash$", r"gemini-flash-latest", r"flash"],
+        "prefer_fast": [r"flash-lite", r"gemini-[\d.]+-flash$", r"flash"],
         "only": r"flash|gemma",
         "embed": "gemini-embedding-001",
         "resets": "pacific",
@@ -256,6 +259,7 @@ FREE = [
         "prefer": [r"mistral-medium-latest", r"mistral-large-latest", r"mistral-small-latest", r"mistral-medium", r"mistral-large"],
         "prefer_code": [r"devstral-medium", r"devstral", r"codestral-latest", r"codestral", r"mistral-medium-latest"],
         "prefer_vision": [r"mistral-medium-latest", r"mistral-small-latest", r"pixtral", r"mistral-small"],
+        "prefer_fast": [r"ministral-8b", r"mistral-small-latest", r"ministral"],
         "embed": "mistral-embed",
         "stt": "voxtral-mini-latest",
     },
@@ -267,6 +271,7 @@ FREE = [
         "signup": "https://cloud.cerebras.ai",
         "prefer": [r"gpt-oss-120b", r"qwen-3-235b", r"llama-3\.3-70b", r"qwen", r"llama"],
         "prefer_code": [r"qwen-3-coder", r"gpt-oss-120b", r"qwen-3-235b", r"llama"],
+        "prefer_fast": [r"llama3\.1-8b", r"qwen-3-32b", r"gpt-oss-120b"],
         "prefer_vision": [],
     },
     {

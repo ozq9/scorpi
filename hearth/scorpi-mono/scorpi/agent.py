@@ -11,8 +11,9 @@ import threading
 import time
 import traceback
 
-from . import db, events, hooks, limits, llm, safety, scores, usage
+from . import db, events, hooks, limits, llm, safety, scores, toolcalls, usage
 from .compact import Compactor
+from .guard import LoopGuard
 from .config import SETTINGS, UPLOADS, WORKSPACE
 from .tools import TOOLS, Result, ToolError, base_dir, policy, schema_for, select_tools
 
@@ -164,6 +165,16 @@ class Agent:
         self.approved_plan = ""
         self.stop_after_tools = False  # a tool ended the turn (the plan was approved or rejected)
         self.current = self.model  # the model answering right now (after switches): its tool calls count for it (scores.py)
+        self.text_tools = False  # the model cannot call tools natively: it uses the text tool format (toolcalls.py)
+        self.guard = LoopGuard()  # notices when the work goes in circles (guard.py)
+        self.trouble = 0  # failed test runs and checks since the last passing run
+        self.escalations = 0
+        self.ladder = []  # stronger models to move to when the work gets stuck (step routing)
+        if depth == 0 and not pin_model and SETTINGS.get("step_routing", "smart") == "thrifty" and (skill == "code" or self.workdir):
+            fast = llm.fast_model({"tools"})
+            if fast and fast != self.model:
+                self.ladder = [self.model]  # start on the fast model; the coding model takes over when it struggles
+                self.model = self.current = fast
 
     def emit(self, event):
         self._emit(event)
@@ -301,6 +312,7 @@ class Agent:
         texts = []
         seen_calls = {}
         max_steps = int(self.max_steps or (SETTINGS["max_steps"] if self.depth == 0 else 12))
+        wrap_up = False  # stuck with nowhere to escalate: the next answer is a report, without tools
 
         for step in range(max_steps + 1):
             if self.cancelled():
@@ -324,7 +336,8 @@ class Agent:
                 names = [n for n in names if n != "submit_plan"]
             if "computer" in active and COMPUTER_GUIDE not in messages[0]["content"]:
                 messages[0]["content"] += "\n\n" + COMPUTER_GUIDE
-            tools = [schema_for(n) for n in names] if names and step < max_steps else None
+            tools = [schema_for(n) for n in names] if names and step < max_steps and not wrap_up else None
+            schemas = {t["function"]["name"]: t["function"].get("parameters") or {} for t in tools or []}
             if step == max_steps:
                 messages.append({"role": "user", "content": "(Step limit reached. Summarize what you have done and what remains, without calling tools.)"})
             self._trim_images(messages)
@@ -344,6 +357,12 @@ class Agent:
                 model = self.switched  # keep using the model that took over after a rate limit
                 caps = llm.capabilities(model)
             self.current = model
+            if tools and not calls:
+                found, rest = toolcalls.extract(text, schemas)  # calls a model wrote as text instead of making them
+                if found:
+                    calls, text = found, rest
+                    self._retext(rest)
+            calls = [toolcalls.fix_call(c, schemas) for c in calls] if schemas else calls
             if text.strip():
                 texts.append(text.strip())
             if not calls:
@@ -358,6 +377,7 @@ class Agent:
                 break
             messages.append({"role": "assistant", "content": text or "", "tool_calls": calls})
             images = []
+            alerts = []
             for call in calls:
                 if self.cancelled():
                     break
@@ -372,11 +392,75 @@ class Agent:
                 messages.append({"role": "tool", "name": call["name"], "tool_call_id": call["id"], "content": (result.text or "")[:16000]})
                 if result.images:
                     images.extend(result.images[:2])
+                alert = self._watch(call, result)
+                if alert:
+                    alerts.append(alert)
             if self.stop_after_tools:
                 break  # the plan was approved (the job starts building) or rejected
+            if alerts or self.trouble >= (2 if self.ladder else 4):
+                model, caps, wrap_up = self._steer(model, caps, alerts, messages)
             if images and not self.cancelled():
                 model, caps = self._show_images(model, caps, images[-2:], messages)
         return "\n\n".join(texts)
+
+    # ---------- staying on track (guard.py) and moving to a stronger model (step routing) ----------
+
+    def _retext(self, text):
+        """The answer shown for this step, without the tool calls the model wrote into it."""
+        for part in reversed(self.parts):
+            if part.get("type") == "text":
+                part["text"] = text
+                if not text:
+                    self.parts.remove(part)
+                return
+
+    def _watch(self, call, result):
+        """After a tool call: count trouble (failing tests and checks) and look for loops. Returns guard.py's verdict."""
+        name, text = call["name"], result.text or ""
+        if name == "run_tests":
+            self.trouble = 0 if result.ok else self.trouble + 1
+        elif name in ("edit_file", "write_file", "apply_patch", "check_code") and ("PROBLEMS FOUND" in text or (name == "check_code" and not result.ok)):
+            self.trouble += 1
+        return self.guard.observe(name, call.get("arguments") or {}, result.ok, text, self.workdir)
+
+    def escalate(self, current, why):
+        """Move the rest of this turn to a stronger model: the next rung (thrifty mode), else the strongest coder of
+        another provider. Returns the new model, or "" when there is none (or routing is off)."""
+        if self.escalations >= 2 or SETTINGS.get("step_routing", "smart") == "off" or getattr(self.run, "unattended", False):
+            return ""
+        from .coding import expert_model
+        target = self.ladder.pop(0) if self.ladder else expert_model(current)
+        if not target or target == current:
+            return ""
+        self.escalations += 1
+        self.trouble = 0
+        self.model, self.switched = target, ""
+        self.emit({"type": "notice", "text": "%s is struggling (%s), so %s takes over." % (llm._label(current), why, llm._label(target))})
+        return target
+
+    def _steer(self, model, caps, alerts, messages):
+        """React to loops and piling failures: nudge the model, hand the work to a stronger one, or wrap up.
+        Returns (model, caps, wrap_up)."""
+        stuck = next((text for level, text in alerts if level == "stuck"), "")
+        nudge = next((text for level, text in alerts if level == "nudge"), "")
+        if stuck or (not nudge and self.trouble >= (2 if self.ladder else 4)):
+            why = "going in circles" if stuck else "%d failed test runs or checks in a row" % self.trouble
+            stronger = self.escalate(model, why)
+            if stronger:
+                messages.append({"role": "user", "content": "[Scorpi] A stronger model takes over because the work was %s. %s\nRead "
+                                 "what was tried above, find the real cause and fix it a different way." % (why, stuck)})
+                return stronger, llm.capabilities(stronger), False
+            if stuck:
+                self.emit({"type": "notice", "text": "Stuck in a loop; asking for a report instead of more attempts."})
+                messages.append({"role": "user", "content": stuck + "\nStop now and do not call more tools. Report what you tried, "
+                                 "what still fails and your best guess at the cause, and what you need from the user."})
+                return model, caps, True
+            self.trouble = 0
+            return model, caps, False
+        if nudge:
+            self.emit({"type": "notice", "text": "Loop noticed: asking the agent to change approach."})
+            messages.append({"role": "user", "content": nudge})
+        return model, caps, False
 
     def _show_images(self, model, caps, images, messages):
         """Give tool images (screenshots, pages, charts) to the model. A text-only model hands the turn to a vision
@@ -417,35 +501,67 @@ class Agent:
         # sub-agents get their own session (parallel helpers one each)
         sid = ("%s-%s%s" % (conv, self.depth, ("-" + self.label) if self.label else "") if self.depth else conv) if conv else ""
         with llm.session(sid), usage.tag(self.run.origin if self.run else "other", conv):
+            if self.text_tools and tools:
+                return self._stream_text(model, clean, tools, options)
             try:
-                return self._consume(llm.chat_stream(model, clean, tools, options, self.cancelled, compactable=True))
+                return self._consume(llm.chat_stream(model, clean, tools, options, self.cancelled, compactable=True), hide=bool(tools))
             except llm.LLMError as exc:
                 msg = str(exc).lower()
-                if tools and ("does not support tools" in msg or "tool" in msg and "support" in msg):
-                    self.no_tools = True
-                    self.emit({"type": "notice", "text": "%s can't use tools, so answering without them. Pick a tool-capable model (qwen3, llama3.1, mistral-nemo...) for full abilities." % model})
-                    return self._consume(llm.chat_stream(model, clean, None, options, self.cancelled))
+                if tools and ("does not support tools" in msg or "tool" in msg and "support" in msg or "function calling" in msg
+                              or "tool_choice" in msg or "tools are not" in msg):
+                    # no native tool calling: tools still work through the text tool format
+                    self.text_tools = True
+                    self.emit({"type": "notice", "text": "%s can't call tools natively, so it uses Scorpi's text tool format." % llm._label(model)})
+                    return self._stream_text(model, clean, tools, options)
                 raise
 
+    def _stream_text(self, model, clean, tools, options):
+        """A step for a model without tool calling: tools are described in the prompt, calls are read from its text."""
+        messages = toolcalls.to_text_history(clean)
+        guide = toolcalls.protocol(tools)
+        if messages and messages[0]["role"] == "system":
+            messages[0] = dict(messages[0], content=messages[0]["content"] + "\n\n" + guide)
+        else:
+            messages.insert(0, {"role": "system", "content": guide})
+        text, thinking, _ = self._consume(llm.chat_stream(model, messages, None, options, self.cancelled, compactable=True), hide=True)
+        calls, rest = toolcalls.extract(text, [t["function"]["name"] for t in tools])
+        if calls:
+            self._retext(rest)
+            return rest, thinking, calls
+        return text, thinking, []
+
     def _summarize(self, prompt):
-        """A summary of earlier steps for context compaction, written by the model this turn works with."""
+        """A summary of earlier steps for context compaction: by the fast model when step routing is on (it is side
+        work), else, or when that fails, by the model this turn works with."""
         conv = self.run.conv_id if self.run else ""
-        with llm.session(conv), usage.tag(self.run.origin if self.run else "other", conv):
-            for event in llm.chat_stream(self.switched or self.model, [{"role": "user", "content": prompt}],
-                                         options={"temperature": 0.2, "num_ctx": int(SETTINGS["num_ctx"])}, cancelled=self.cancelled):
-                if event["type"] == "end":
-                    return event["content"]
+        working = self.switched or self.model
+        fast = llm.fast_model() if SETTINGS.get("step_routing", "smart") != "off" and not getattr(self.run, "unattended", False) else ""
+        for model in list(dict.fromkeys(m for m in (fast, working) if m)):
+            try:
+                with llm.session(conv), usage.tag(self.run.origin if self.run else "other", conv):
+                    for event in llm.chat_stream(model, [{"role": "user", "content": prompt}],
+                                                 options={"temperature": 0.2, "num_ctx": int(SETTINGS["num_ctx"])}, cancelled=self.cancelled):
+                        if event["type"] == "end" and event["content"].strip():
+                            return event["content"]
+            except llm.LLMError:
+                continue
         return ""
 
-    def _consume(self, stream):
+    def _consume(self, stream, hide=False):
+        """Read a model's stream; hide: keep tool calls the model writes as text out of what the user sees."""
         text, thinking, calls = "", "", []
+        veil = toolcalls.Hide() if hide else None
+        shown = ""
         for event in stream:
             if event["type"] == "thinking":
                 thinking += event["content"]
                 self.emit({"type": "thinking", "content": event["content"]})
             elif event["type"] == "token":
                 text += event["content"]
-                self.emit({"type": "token", "content": event["content"]})
+                visible = veil.feed(event["content"]) if veil else event["content"]
+                shown += visible
+                if visible:
+                    self.emit({"type": "token", "content": visible})
                 if self.depth == 0 and self.run and self.run.inbox:
                     # the user said something mid-answer: stop here and turn to them (run_turn picks the message up)
                     close = getattr(stream, "close", None)
@@ -459,10 +575,15 @@ class Agent:
                 self.emit({"type": "notice", "text": event["text"]})
             elif event["type"] == "end":
                 calls = event["tool_calls"]
+        if veil:
+            tail = veil.flush()
+            if tail:
+                shown += tail
+                self.emit({"type": "token", "content": tail})
         if thinking:
             self.parts.append({"type": "thinking", "text": thinking})
-        if text:
-            self.parts.append({"type": "text", "text": text})
+        if shown.strip() if veil else text:
+            self.parts.append({"type": "text", "text": shown if veil else text})
         return text, thinking, calls
 
     # ---------- tools ----------
@@ -478,6 +599,9 @@ class Agent:
         started = time.time()
         if not entry:
             result = Result("Unknown tool %r. Use enable_tools to load more tools." % name, ok=False)
+        elif toolcalls.unreadable(args):
+            result = Result("Error: your arguments for %s could not be read as JSON. Call it again with one valid JSON object "
+                            "(double quotes, escaped newlines). You sent: %s" % (name, args["_raw"][:300]), ok=False)
         else:
             mode = policy(name)
             verdict, why = self._permission(name, args, mode)

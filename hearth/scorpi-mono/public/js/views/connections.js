@@ -35,6 +35,8 @@ export function renderConnections(el, hash) {
   ({ model, programs, tools, github, mcp, skills })[tab](body);
 }
 
+const switchRow = (title, sub, on, onChange) => h('div.list-row', h('div.lr-main', h('div.lr-title', title), h('div.lr-sub', sub)), switchEl(on, onChange));
+
 async function saveSettings(patch, msg = 'Saved') {
   try {
     state.settings = await api.post('/api/settings', patch);
@@ -271,6 +273,15 @@ async function model(body) {
         field('Vision model', selectEl(withCurrent([['', 'Automatic (any vision model)'], ...chat.map((n) => [n, n]), ...cloudVision], s.vision_model), s.vision_model, (v) => saveSettings({ vision_model: v })), 'Looks at images and screenshots when the chat model is text-only.'),
         field('Embedding model', selectEl(embedOpts.length ? embedOpts : [[s.embed_model, s.embed_model]], s.embed_model, (v) => saveSettings({ embed_model: v })), 'For knowledge search (RAG). Re-add documents after changing it.'),
         field('Context length', selectEl([['4096', '4k'], ['8192', '8k'], ['16384', '16k (default)'], ['32768', '32k'], ['65536', '64k']], String(s.num_ctx), (v) => saveSettings({ num_ctx: +v })), 'Local models only. Larger helps long tasks; uses more memory.'),
+        field('Model for each step', selectEl([['smart', 'Smart (recommended)'], ['thrifty', 'Thrifty: start fast, step up'], ['off', 'Off: one model throughout']], s.step_routing || 'smart', (v) => saveSettings({ step_routing: v })),
+          'Smart: summaries and titles go to a fast model, and a stronger model takes over when the work is stuck. Thrifty also starts coding on the fast model to save the strong one\'s requests.'),
+        field('Fast model', selectEl(withCurrent([['', 'Automatic (a quick small model)'], ...chat.map((n) => [n, n]), ...cloudChat], s.fast_model), s.fast_model, (v) => saveSettings({ fast_model: v })), 'For side work: context summaries, titles and the first try in thrifty mode.'),
+      ),
+    );
+    status.appendChild(
+      h('div.panel', { style: { marginTop: '14px' } },
+        switchRow('Continue by itself after usage limits', 'When every model is at its limit, work pauses and carries on when the first one resets.', s.auto_resume !== false, (v) => saveSettings({ auto_resume: v })),
+        switchRow('Use a local model when the cloud runs out', 'With Ollama installed, work continues on a local model instead of waiting.', s.local_fallback !== false, (v) => saveSettings({ local_fallback: v })),
       ),
     );
     if (!models.length) list.appendChild(h('div.list-row', h('span.f-ic', icon('cpu')), h('div.lr-main', h('div.lr-title', 'No local models'), h('div.lr-sub', cloud.length ? `${cloud.length} cloud models available above.` : 'Optional: install Ollama to run models offline.'))));

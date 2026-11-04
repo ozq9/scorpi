@@ -16,7 +16,7 @@ import urllib.request
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
-from . import limits, usage
+from . import limits, toolcalls, usage
 from . import providers as P
 from .config import SETTINGS
 
@@ -453,6 +453,28 @@ def pick_code_model(exclude=(), exclude_providers=()):
         paid = [c for c in candidates if P.BY_ID[split_cloud(c)[0]].get("category") == "coding"]
         candidates = paid + scores.rank([c for c in candidates if c not in paid])
     return candidates[0]
+
+
+def fast_model(need=()):
+    """A quick, light model for side work (context summaries, titles, the first try in thrifty mode): the "Fast model"
+    setting, else a small model from a fast provider, else the chat model."""
+    chosen = SETTINGS.get("fast_model") or ""
+    if chosen and chosen != "auto":
+        return chosen
+    need = set(need)
+    now = time.time()
+    for pid in cloud_order():
+        prov = P.BY_ID[pid]
+        if not prov.get("prefer_fast") or _slow.get(pid, 0) > now or limits.provider_resting(pid):
+            continue
+        models, _ = cloud_models(pid)
+        eligible = [m for m in models if need <= set(m["caps"]) and not limits.resting(cloud_ref(pid, m["id"]))]
+        for pattern in prov["prefer_fast"]:
+            rx = re.compile(pattern, re.I)
+            hit = next((m for m in eligible if rx.search(m["id"])), None)
+            if hit:
+                return cloud_ref(pid, hit["id"])
+    return default_model()
 
 
 def coding_model():
@@ -978,11 +1000,8 @@ def _ollama_stream(model, messages, tools, options, cancelled):
                 for call in msg.get("tool_calls") or []:
                     fn = call.get("function") or {}
                     args = fn.get("arguments") or {}
-                    if isinstance(args, str):
-                        try:
-                            args = json.loads(args or "{}")
-                        except ValueError:
-                            args = {"_raw": args}
+                    if not isinstance(args, dict):
+                        args = toolcalls.parse_args(args)
                     calls.append({"id": call.get("id") or "call_%d" % len(calls), "name": fn.get("name", ""), "arguments": args})
     yield {"type": "end", "content": content, "thinking": thinking, "tool_calls": calls, "usage": used}
 
@@ -1090,10 +1109,7 @@ def _openai_stream(endpoint, model, messages, tools, options, cancelled):
     calls = []
     for index in sorted(partial):
         slot = partial[index]
-        try:
-            args = json.loads(slot["args"] or "{}")
-        except ValueError:
-            args = {"_raw": slot["args"]}
+        args = toolcalls.parse_args(slot["args"])  # sloppy JSON from weaker models is repaired where possible
         calls.append({"id": slot["id"] or "call_%d" % index, "name": slot["name"], "arguments": args})
     yield {"type": "end", "content": content, "thinking": thinking, "tool_calls": calls, "usage": used}
 
@@ -1227,17 +1243,14 @@ def _anthropic_stream(endpoint, model, messages, tools, options, cancelled):
         block = blocks[index]
         if block["type"] != "tool_use":
             continue
-        try:
-            args = json.loads(block["json"] or "{}")
-        except ValueError:
-            args = {"_raw": block["json"]}
+        args = toolcalls.parse_args(block["json"])
         calls.append({"id": block["id"] or "call_%d" % index, "name": block["name"] or "", "arguments": args})
     yield {"type": "end", "content": content, "thinking": thinking, "tool_calls": calls, "usage": used if used["input"] or used["output"] else None}
 
 
 def complete(prompt, system="", model=None, max_chars=4000):
-    """Small non-streaming helper (titles, summaries)."""
-    model = model or default_model()
+    """Small non-streaming helper (titles, summaries): on the fast model when step routing is on."""
+    model = model or (fast_model() if SETTINGS.get("step_routing", "smart") != "off" else "") or default_model()
     messages = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
     text = ""
     for event in chat_stream(model, messages, options={"temperature": 0.3, "num_ctx": 4096}):
