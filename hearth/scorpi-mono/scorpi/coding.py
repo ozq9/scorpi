@@ -2,6 +2,7 @@
 code review, the diff a review looks at, and the project commands (/init, /review, /test, /fix...)."""
 
 import os
+import re
 
 from . import gitops, llm, usage
 from .config import SETTINGS
@@ -151,6 +152,31 @@ def review(path, project="", base="", current="", focus=""):
     if not text:
         raise llm.LLMError("%s returned an empty review. Try again, or choose another second-opinion model." % llm.label(model))
     return {"review": text, "model": model, "scope": scope}
+
+
+MENTION = re.compile(r"(?<![\w@])@([\w.\-/\\]*[\w])")
+
+
+def expand_mentions(text, folder, limit=60000):
+    """@path mentions of files in a project folder: the message plus each file's content (once, inside the folder only)."""
+    if not folder or "@" not in (text or ""):
+        return text
+    root = os.path.realpath(folder)
+    parts, seen, budget = [text], set(), limit
+    for m in MENTION.finditer(text):
+        rel = m.group(1).replace("\\", "/")
+        full = os.path.realpath(os.path.join(root, *rel.split("/")))
+        if rel in seen or not (full == root or full.startswith(root + os.sep)) or not os.path.isfile(full) or budget <= 0:
+            continue
+        seen.add(rel)
+        try:
+            with open(full, encoding="utf-8", errors="replace") as fh:
+                body = fh.read(budget)
+        except OSError:
+            continue
+        budget -= len(body)
+        parts.append('<file path="%s">\n%s\n</file>' % (rel, body))
+    return "\n\n".join(parts)
 
 
 def command_prompt(name, extra=""):

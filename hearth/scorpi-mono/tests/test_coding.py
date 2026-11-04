@@ -71,5 +71,24 @@ class CodingTest(unittest.TestCase):
         self.assertEqual(coding.command_prompt("nope"), "")
 
 
+
+class MentionTest(unittest.TestCase):
+    def test_expand_mentions_inside_the_project_only(self):
+        from scorpi.coding import expand_mentions
+        root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(root, "src"))
+        with open(os.path.join(root, "src", "app.js"), "w") as fh:
+            fh.write("console.log(1)\n")
+        outside = os.path.join(os.path.dirname(root), "secret-%s.txt" % os.path.basename(root))
+        with open(outside, "w") as fh:
+            fh.write("TOP SECRET")
+        text = "fix @src/app.js and read @../%s and mail me@example.com" % os.path.basename(outside)
+        out = expand_mentions(text, root)
+        self.assertIn('<file path="src/app.js">', out)
+        self.assertIn("console.log(1)", out)
+        self.assertNotIn("TOP SECRET", out)
+        self.assertEqual(expand_mentions("no mentions", root), "no mentions")
+
+
 if __name__ == "__main__":
     unittest.main()

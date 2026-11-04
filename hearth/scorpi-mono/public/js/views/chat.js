@@ -337,7 +337,7 @@ function updateHead() {
   els.skillTag.classList.toggle('hidden', !skill);
   if (skill) els.skillTag.replaceChildren(icon(skill.icon || 'spark'), skill.name);
   const job = agentJob();
-  els.input.placeholder = proj ? (state.activeId ? `Message the ${proj.name} agent…` : 'Describe what to build…') : job ? `Message ${job.agent_name}…` : placeholderFor(anySkill(composer.skill));
+  els.input.placeholder = proj ? (state.activeId ? `Message the ${proj.name} agent…` + (isMobile() ? '' : '  / commands · @ files') : 'Describe what to build…') : job ? `Message ${job.agent_name}…` : placeholderFor(anySkill(composer.skill));
   els.form.classList.toggle('agent-chat', !!job);
   updateModelChip();
   updateSkillChip();
@@ -1956,6 +1956,50 @@ async function undoLastRun() {
   }
 }
 
+// @ in a project's prompt box: its files, to hand to the agent with the message (the server adds their contents).
+function mentionQuery() {
+  if (!state.project || !state.project.tree) return null;
+  const pos = els.input.selectionStart ?? els.input.value.length;
+  const m = els.input.value.slice(0, pos).match(/(?:^|\s)@([\w./\\-]*)$/);
+  return m ? { q: m[1].toLowerCase(), start: pos - m[1].length - 1, end: pos } : null;
+}
+
+function updateMention() {
+  const mq = mentionQuery();
+  if (!mq) return false;
+  const ranked = state.project.tree
+    .filter((f) => !f.dir)
+    .map((f) => {
+      const p = f.path.toLowerCase();
+      const base = p.split('/').pop();
+      const score = !mq.q ? 3 : base.startsWith(mq.q) ? 0 : base.includes(mq.q) ? 1 : p.includes(mq.q) ? 2 : -1;
+      return [score, f];
+    })
+    .filter(([score]) => score >= 0)
+    .sort((a, b) => a[0] - b[0] || a[1].path.length - b[1].path.length)
+    .slice(0, 40);
+  if (!ranked.length) return false;
+  slashItems = ranked.map(([, f]) => ({ id: f.path, mention: true, start: mq.start, end: mq.end }));
+  slashIndex = Math.min(slashIndex, slashItems.length - 1);
+  clear(els.slash);
+  els.slash.dataset.kind = 'mention';
+  const list = els.slash.appendChild(h('div.slash-list'));
+  slashItems.forEach((f, i) => {
+    const parts = f.id.split('/');
+    const name = parts.pop();
+    list.appendChild(h('div.slash-item.compact' + (i === slashIndex ? '.sel' : ''), { onmousedown: (e) => { e.preventDefault(); pickSlash(i); } },
+      h('div.si-text', h('span.si-name', name), h('span.si-meta', parts.join('/') || './'))));
+  });
+  els.slash.classList.remove('hidden');
+  placeMenu(null);
+  return true;
+}
+
+/** The menu over the prompt box that fits what is typed: @ files in a project, else / commands and skills. */
+function updateMenus() {
+  if (!updateMention()) updateSlash();
+}
+
 function updateSlash() {
   const m = els.input.value.match(/^\/([\w-]*)$/);
   if (!m) return hideSlash();
@@ -1987,6 +2031,18 @@ function hideSlash() {
 function pickSlash(i) {
   const s = slashItems[i];
   if (!s) return;
+  if (s.mention) {
+    const v = els.input.value;
+    const insert = '@' + s.id + ' ';
+    els.input.value = v.slice(0, s.start) + insert + v.slice(s.end);
+    const caret = s.start + insert.length;
+    els.input.setSelectionRange(caret, caret);
+    hideSlash();
+    autosize();
+    updateSend();
+    els.input.focus();
+    return;
+  }
   if (s.code) {
     hideSlash();
     els.input.value = '';
@@ -2201,7 +2257,7 @@ export function initChat() {
   els.input.addEventListener('input', () => {
     autosize();
     updateSend();
-    updateSlash();
+    updateMenus();
     // Ember peeks at what you are typing
     for (const m of [buddy]) {
       if (m && m.base === 'idle') m.lookAt(els.input, 1600).flash('curious', 1600);
@@ -2212,7 +2268,7 @@ export function initChat() {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         slashIndex = (slashIndex + (e.key === 'ArrowDown' ? 1 : -1) + slashItems.length) % slashItems.length;
-        updateSlash();
+        updateMenus();
         return;
       }
       if (e.key === 'Enter' || e.key === 'Tab') {

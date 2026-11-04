@@ -296,6 +296,7 @@ What the Coder does on Scorpi's own engine (*Basic*, no OpenCode needed), on any
   builds, tests, running the project and file changes inside the project folder go ahead (every run can be undone);
   Full auto still asks before destructive commands (deleting folders, force pushes, hard resets, killing programs);
   wiping a disk or the home folder is refused at every level. Approval cards say why they ask.
+- **@ files**: type `@` in a project's prompt box to pick files; the agent gets their contents with your message.
 - **Project commands** in a project's `/` menu: `/init` writes `AGENTS.md`, `/review`, `/test` (run, fix, repeat until
   green), `/fix` (checks, tests and build), `/explain`, `/security`, `/plan` and `/undo` (the last run's files back).
 - **A second opinion**: `ask_expert` asks another model (by default the strongest coder of a different provider; set it

@@ -10,8 +10,6 @@ app's Code area with the terminal's conversation, its checkpoints and every chan
 import argparse
 import os
 import queue
-import re
-import shutil
 import subprocess
 import sys
 import threading
@@ -321,20 +319,8 @@ class Session:
 
     def _expand(self, text):
         """@path mentions become the file's content; output of !commands goes along."""
-        parts = [text]
-        seen = set()
-        for m in re.finditer(r"(?<![\w@])@([\w./\\-]+[\w])", text):
-            rel = m.group(1)
-            path = os.path.join(self.folder, rel)
-            if rel in seen or not os.path.isfile(path):
-                continue
-            seen.add(rel)
-            try:
-                with open(path, encoding="utf-8", errors="replace") as fh:
-                    body = fh.read(60000)
-            except OSError:
-                continue
-            parts.append('<file path="%s">\n%s\n</file>' % (rel, body))
+        from .coding import expand_mentions
+        parts = [expand_mentions(text, self.folder)]
         if self.pending:
             parts.append("Output of commands the user ran:\n" + "\n\n".join(self.pending))
             self.pending = []

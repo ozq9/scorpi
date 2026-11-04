@@ -793,6 +793,13 @@ def chat(h):
     if words and words[0].startswith("/") and words[0][1:].lower() in coding.COMMANDS and (project or (conv and agents.job_for_conversation(conv["id"]))):
         # a project command (/init, /review, /test...): the agent gets its instructions, the chat shows what was typed
         shown, text = text, coding.command_prompt(words[0][1:], words[1] if len(words) > 1 else "")
+    if "@" in text and (project or conv):
+        # @path mentions in a coding project: the agent gets the files' contents, the chat shows what was typed
+        live_job = agents.job_for_conversation(conv["id"]) if conv else None
+        folder = agents.project_path(project) if project else (live_job.workdir if live_job else "")
+        expanded = coding.expand_mentions(text, folder)
+        if expanded != text:
+            shown, text = shown or text, expanded
     if project and not conv:
         # the Code area: a message in a project goes to its agent, or starts the coder on it
         job = agents.latest_job(project)
