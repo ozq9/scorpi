@@ -4,7 +4,7 @@ import { api, streamJSON, upload } from '../lib/api.js';
 import { $, baseName, clear, copyText, debounce, extOf, fmtRelative, fmtSize, h, icon, isMobile, wordsIn } from '../lib/dom.js';
 import { highlight, renderMarkdown } from '../lib/md.js';
 import { enhanceMarkdown, openViewer } from '../lib/viewer.js';
-import { closePop, confirmSheet, popover, promptSheet, toast } from '../lib/ui.js';
+import { closePop, confirmSheet, popover, promptSheet, sheet, toast } from '../lib/ui.js';
 import { sfx } from '../lib/sfx.js';
 import { createScorpi } from '../lib/scorpi.js';
 import { decorateAnswer, hasHooks, pluginCommands, runHooks, toolEvent } from '../lib/looks.js';
@@ -12,6 +12,7 @@ import { InkWriter } from '../lib/ink.js';
 import { bus, prefs, setPref, skillById, state } from '../store.js';
 import { browserRecognizer, createStreamSpeaker, hostSttAvailable, record, speak, stopSpeaking, sttRoute, sttUnavailableReason, transcribe, audioContext } from '../audio.js';
 import { renderCard } from './cards.js';
+import { askWhy, lessonCard } from './lessons.js';
 import { canvasApply, canvasChip, canvasLoad, canvasReset, initCanvas } from './canvas.js';
 import { hideProjectPane, refreshProject, showProjectPane, startAttempts, toggleProjectPane } from './project.js';
 import { startVoice, stopVoice, voiceBar, voiceOn, voiceRefresh, voiceStatus } from './voice.js';
@@ -508,6 +509,21 @@ export function followAgentUpdate(d) {
 }
 
 // A chat that paused at the usage limits continues by itself: show it live when it is open.
+// A rule Scorpi suggests after a correction (scorpi/lessons.py): in the conversation it came from, or as a toast.
+bus.on('server:lesson', (d) => {
+  if (!d || document.querySelector(`[data-lesson="${d.id}"]`)) return;
+  if (d.conv_id && d.conv_id === state.activeId && state.view === 'chat' && !live) {
+    els.messages.appendChild(lessonCard(d));
+    if (nearBottom()) scrollToEnd();
+    return;
+  }
+  toast('A rule to remember?', {
+    body: d.rule,
+    timeout: 12000,
+    action: { label: 'Review', run: () => sheet({ title: 'A rule for this project', body: lessonCard(d), foot: (close) => [h('button.btn.quiet', { onclick: close }, 'Close')] }) },
+  });
+});
+
 export function followResumed(d) {
   if (!d || d.conv_id !== state.activeId || live || state.view !== 'chat') return;
   els.messages.querySelectorAll('.msg.last').forEach((n) => n.classList.remove('last'));
@@ -2033,9 +2049,10 @@ async function undoLastRun() {
     const res = await api.get(base + '/diff?scope=run');
     if (!res.base || !res.files.length) return toast('Nothing to undo', { body: 'The last run did not change any files.' });
     if (!(await confirmSheet('Undo the last run?', `${res.files.length} file${res.files.length === 1 ? '' : 's'} go back to how they were before the agent started it. The current files are saved as a checkpoint first.`, { confirm: 'Undo run', danger: true }))) return;
-    await api.post(base + '/checkpoints/' + res.base.sha + '/restore');
+    const out = await api.post(base + '/checkpoints/' + res.base.sha + '/restore');
     toast('Run undone', { body: 'The files are back as before it.' });
     refreshProject();
+    if (out.undid_run) askWhy(p.slug, out.run_title);
   } catch (err) {
     toast(err.message, 'error');
   }

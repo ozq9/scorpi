@@ -11,6 +11,7 @@ import { LANGS, kindOf, openViewer, previewBody } from '../lib/viewer.js';
 import { navigate } from '../router.js';
 import { bus, prefs, setPref, state } from '../store.js';
 import { proofLine, shortModel } from './agents.js';
+import { lessonCard } from './lessons.js';
 import { renderChanges, renderGithub } from './project-git.js';
 import { renderTerminal, termRunning, unmountTerminal } from './project-term.js';
 
@@ -169,6 +170,23 @@ bus.on('server:agent_job', (job) => {
   }
 });
 bus.on('server:checkpoint', (d) => data && d.project === data.slug && refreshProject(true));
+
+// ---------- rules suggested from the user's corrections, for AGENTS.md (scorpi/lessons.py) ----------
+
+function lessonsNode() {
+  const box = h('div.pc-sec.lessons-sec');
+  const slug = data && data.slug;
+  if (!slug) return box;
+  api.get('/api/projects/' + encodeURIComponent(slug) + '/lessons').then((res) => {
+    if (!box.isConnected && !box.parentNode) return;
+    const items = res.lessons || [];
+    box.replaceChildren(...(items.length
+      ? [h('div.pa-h', 'Suggested rules', h('span.count', String(items.length))), ...items.map((it) => lessonCard(it))]
+      : (res.rules || []).length ? [h('div.pa-h', 'AGENTS.md rules', h('span.count', String(res.rules.length))), h('div.muted.small', 'Every coding agent follows them in this project. Scorpi suggests new ones when you correct it.')] : []));
+  }).catch(() => {});
+  return box;
+}
+bus.on('server:lesson', (d) => data && d.slug === data.slug && tab === 'agents' && visible() && (built.delete('agents'), fill('agents')));
 
 // ---------- parallel attempts: the same task by several models, each in a copy; keep the best (scorpi/attempts.py) ----------
 
@@ -522,6 +540,7 @@ function agentsNode() {
   }
   if (job.question) nodes.push(h('div.pa-ask', icon('chat'), h('div.grow', h('b', 'Asks: '), job.question.title || 'a question'), h('span.muted.small', 'Answer in the chat')));
   if (job.proof && job.status !== 'running') nodes.push(h('div.pc-sec', proofLine(job.proof)));
+  nodes.push(lessonsNode());
   if ((job.contract || []).length) {
     nodes.push(h('div.pc-sec', h('div.pa-h', 'Approved tests', h('span.count', String(job.contract.length))),
       h('div.muted.small', 'The contract: the agent builds until these pass and cannot change them without asking.'),

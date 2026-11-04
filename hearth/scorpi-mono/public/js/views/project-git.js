@@ -9,6 +9,7 @@ import { renderMarkdown } from '../lib/md.js';
 import { confirmSheet, popover, promptSheet, sheet, switchEl, toast } from '../lib/ui.js';
 import { navigate } from '../router.js';
 import { bus } from '../store.js';
+import { askWhy } from './lessons.js';
 
 const per = new Map(); // slug -> {scope, open: Set, ckpt: sha shown in the checkpoint list, message}
 const st = (slug) => {
@@ -110,6 +111,7 @@ async function runScope(body, ctx, s) {
             if (!(await confirmSheet('Undo the last run?', 'Every file goes back to how it was before the agent started this run. The current files are saved as a checkpoint first, so you can return to them.', { confirm: 'Undo run', danger: true }))) return;
             const out = await act(e.currentTarget, () => api.post(base(d.slug) + '/checkpoints/' + res.base.sha + '/restore'), 'Run undone. The files are back as before it.');
             if (out) ctx.refresh();
+            if (out && out.undid_run) askWhy(d.slug, out.run_title);
           },
         }, icon('history'), 'Undo run')
       : null,

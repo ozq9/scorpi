@@ -720,3 +720,13 @@ body:not(.busy) .composer.voice .send { display: none; }
 .pf-unverified ul { margin: 0; padding-left: 18px; }
 .pf-files summary { cursor: pointer; font-size: var(--t-xs); color: var(--muted); }
 .pf-files .mono { white-space: pre-wrap; font-size: var(--t-xs); margin-top: 4px; color: var(--muted); overflow-wrap: anywhere; }
+
+/* a rule suggested from the user's correction, for AGENTS.md (scorpi/lessons.py) */
+.lesson-card { padding: var(--s-6) var(--s-7); display: grid; gap: var(--s-4); max-width: 760px; border-left: 3px solid var(--accent); }
+.lesson-card.settled { border-left-color: var(--line-2); padding: var(--s-5) var(--s-7); }
+.lesson-card .ls-head { display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap; font-size: var(--t-sm); }
+.lesson-card .ls-head svg { width: 15px; height: 15px; color: var(--accent); }
+.lesson-card .ls-said { font-size: var(--t-xs); color: var(--muted); font-style: italic; overflow-wrap: anywhere; }
+.lesson-card .ls-rule { font-weight: var(--w-medium); }
+.lesson-card .ls-acts { display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap; }
+.lessons-sec:empty { display: none; }

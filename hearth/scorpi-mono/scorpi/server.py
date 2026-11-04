@@ -22,7 +22,7 @@ import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import VERSION, agent, agents, attempts, backlog, bench, coding, crash, db, discord, events, gallery, github, gitops, knowledge, limits, llm, looks, music, notify, opencode, privacy, scheduler, scores, updates, usage, voice
+from . import VERSION, agent, agents, attempts, backlog, bench, coding, crash, db, discord, events, gallery, github, gitops, knowledge, lessons, limits, llm, looks, music, notify, opencode, privacy, scheduler, scores, updates, usage, voice
 from .config import DATA_DIR, IS_WINDOWS, PUBLIC_DIR, SETTINGS, UPLOADS, WORKSPACE
 from .mcp import MANAGER, PRESETS
 from .tools import GROUPS, TOOLS, ToolError, catalog, check_access, module_available
@@ -821,6 +821,8 @@ def chat(h):
     if job and not attachments:
         # an agent job's own conversation: the message goes to the agent, which carries on in the same chat
         busy = events.active_run_for(conv["id"])
+        if job.project and job.workdir and not shown and lessons.looks_like_correction(text):
+            lessons.consider(job.project, job.workdir, text, "a message to the agent", conv["id"])  # maybe a rule for AGENTS.md
         try:
             job.message(text, plan=plan, display=shown, tests=tests)
         except Exception as exc:
@@ -2259,12 +2261,40 @@ def project_checkpoint_restore(h, path, folder, sha):
     if job and job.status == "running":
         raise gitops.GitError("The agent is still working on this project. Stop it first.")
     before = gitops.restore(folder, path, sha)
-    if job and job.checkpoint and job.checkpoint.startswith(sha[:7]) and job.status == "done":
+    undid = bool(job and job.checkpoint and job.checkpoint.startswith(sha[:7]) and job.status == "done")
+    if undid:
         # the user undid the agent's last run: it counts against the model that did it (scores.py)
         scores.record(job.model_ref(), "undone")
         scores.record(job.model_ref(), "kept", -1)
     events.publish("checkpoint", {"project": folder, "sha": sha})
-    h.send_json({"ok": True, "undo": before})
+    h.send_json({"ok": True, "undo": before, "undid_run": undid, "run_title": job.title if undid else ""})
+
+
+@_git_route("GET", "/lessons")
+def project_lessons(h, path, folder):
+    """Rules Scorpi suggests adding to AGENTS.md after the user's corrections (scorpi/lessons.py)."""
+    h.send_json({"lessons": lessons.pending(folder), "rules": lessons.existing_rules(path)})
+
+
+@_git_route("POST", "/lessons/why")
+def project_lessons_why(h, path, folder):
+    """Why the user undid the agent's work: maybe a rule worth remembering."""
+    text = str(h.body_json().get("text") or "").strip()
+    if not text:
+        return h.send_json({"lesson": None})
+    h.send_json({"lesson": lessons.consider(folder, path, text, "undoing the agent's work", wait=True)})
+
+
+@_git_route("POST", "/lessons/([a-f0-9]+)")
+def project_lesson_decide(h, path, folder, lesson_id):
+    if not h.is_owner:
+        return h.error("Only the owner of this PC can do that.", 403)
+    body = h.body_json()
+    if body.get("accept"):
+        where = lessons.accept(lesson_id, path, str(body.get("rule") or ""))
+        return h.send_json({"added": True, "path": where})
+    lessons.dismiss(lesson_id)
+    h.send_json({"added": False})
 
 
 @_git_route("GET", "/github")

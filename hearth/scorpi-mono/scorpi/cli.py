@@ -313,7 +313,33 @@ class Session:
         if result["resume_at"] and not run.cancelled and SETTINGS.get("auto_resume", True) and self._sleep_until(result["resume_at"]):
             from . import limits
             return self.turn(limits.CONTINUE, display="(continuing after the usage limits reset)")
+        if not display and not self.headless and not run.cancelled:
+            self._lesson(text, conv)
         return answer, not result["error"] and not run.cancelled
+
+    def _lesson(self, text, conv):
+        """A correction may be a lasting rule: offer to add it to AGENTS.md (lessons.py)."""
+        from . import db, lessons
+        earlier = [m for m in db.get_messages(conv) if m["role"] == "user"]
+        if len(earlier) < 2 or not lessons.looks_like_correction(text):
+            return
+        item = lessons.consider(self.project, self.folder, text, "a message to the agent", conv, wait=True)
+        if not item:
+            return
+        self.ui.line(self.ui.c.blue("Remember this for next time? ") + self.ui.c.bold(item["rule"]))
+        answer = self.ui.ask("Add it to AGENTS.md? [y]es / [e]dit / [n]o: ").strip().lower()
+        if answer in ("y", "yes"):
+            lessons.accept(item["id"], self.folder)
+            self.ui.line(self.ui.c.dim("Added to AGENTS.md."))
+        elif answer in ("e", "edit"):
+            rule = self.ui.ask("Rule: ").strip()
+            if rule:
+                lessons.accept(item["id"], self.folder, rule)
+                self.ui.line(self.ui.c.dim("Added to AGENTS.md."))
+            else:
+                lessons.dismiss(item["id"])
+        else:
+            lessons.dismiss(item["id"])
 
     def _sleep_until(self, at):
         """Every model is at its usage limit: wait for the first reset (Ctrl+C gives up). True when the time came."""

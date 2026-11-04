@@ -148,10 +148,18 @@ def submit_plan(ctx, plan, title=""):
         return Result("The user approved the plan%s. Stop here with one short sentence; the building starts right after." % extra,
                       display={"type": "plan", "steps": steps, "note": "Approved" + (": " + note if note else "")})
     if note:
+        _learn(agent, note, "asking for changes to a plan")
         return Result("The user wants changes before approving:\n%s\nRevise the plan (look at more code if needed) and call "
                       "submit_plan again." % note, ok=False)
     agent.stop_after_tools = True
     return Result("The user rejected the plan. Stop, and say in one or two sentences what you would need to plan it differently.", ok=False)
+
+
+def _learn(agent, note, source):
+    """A correction in a review may be a lasting rule for the project (lessons.py)."""
+    from .. import lessons
+    if getattr(agent, "project", "") and getattr(agent, "workdir", ""):
+        lessons.consider(agent.project, agent.workdir, note, source, agent.run.conv_id if agent.run else "")
 
 
 @tool(
@@ -197,6 +205,7 @@ def submit_tests(ctx, files, command, summary):
         return Result("The user approved the tests%s. Stop here with one short sentence; building starts right after."
                       % ((" with this note: %s" % note) if note else ""), display={"type": "plan", "steps": [{"title": "Tests approved: " + ", ".join(sorted(content)), "status": "done"}]})
     if note:
+        _learn(agent, note, "asking for changes to the tests")
         return Result("The user wants changes to the tests before approving:\n%s\nRevise them, run them (they must fail for the "
                       "right reason) and call submit_tests again." % note, ok=False)
     agent.stop_after_tools = True
