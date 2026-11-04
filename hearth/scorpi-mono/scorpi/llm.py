@@ -403,12 +403,12 @@ def pick_model(need=(), exclude_providers=(), exclude=()):
     return ""
 
 
-def pick_code_model(exclude=()):
+def pick_code_model(exclude=(), exclude_providers=()):
     """The strongest coding model on offer: each provider's coding pick, in the order the user set providers up.
     Used when the coding model is "auto" (paid plans come first, then free tiers, then free credits)."""
     now = time.time()
     for pid in cloud_order():
-        if _slow.get(pid, 0) > now:
+        if _slow.get(pid, 0) > now or pid in exclude_providers:
             continue
         prov = P.BY_ID[pid]
         models, _ = cloud_models(pid)

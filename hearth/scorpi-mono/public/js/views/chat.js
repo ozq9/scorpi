@@ -1927,17 +1927,45 @@ export function updateModelChip() {
 // slash menu
 let slashIndex = 0;
 let slashItems = [];
+// Project commands (/init, /review, /test...): the server keeps their instructions; /plan and /undo work here.
+let codeCommands = [];
+const LOCAL_CODE_COMMANDS = [
+  { name: 'plan', description: 'Your next message: see a plan to approve before anything is built', icon: 'route' },
+  { name: 'undo', description: 'Undo the last agent run: the files go back to how they were before it', icon: 'history' },
+];
+function loadCodeCommands() {
+  api.get('/api/code-commands').then((r) => (codeCommands = r.commands || [])).catch(() => {});
+}
+const projectCommands = () =>
+  (agentConversation() ? [...LOCAL_CODE_COMMANDS.filter((c) => c.name !== 'undo' || state.project), ...codeCommands] : [])
+    .map((c) => ({ id: c.name, name: c.name, description: c.description, icon: c.icon, code: true }));
+
+async function undoLastRun() {
+  const p = state.project;
+  if (!p) return;
+  const base = '/api/projects/' + encodeURIComponent(p.slug);
+  try {
+    const res = await api.get(base + '/diff?scope=run');
+    if (!res.base || !res.files.length) return toast('Nothing to undo', { body: 'The last run did not change any files.' });
+    if (!(await confirmSheet('Undo the last run?', `${res.files.length} file${res.files.length === 1 ? '' : 's'} go back to how they were before the agent started it. The current files are saved as a checkpoint first.`, { confirm: 'Undo run', danger: true }))) return;
+    await api.post(base + '/checkpoints/' + res.base.sha + '/restore');
+    toast('Run undone', { body: 'The files are back as before it.' });
+    refreshProject();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
 function updateSlash() {
   const m = els.input.value.match(/^\/([\w-]*)$/);
   if (!m) return hideSlash();
   const q = m[1].toLowerCase();
-  // skills, then commands that plugins added (Studio → plugins: scorpi.command)
-  slashItems = [...state.skills, ...pluginSkills()].filter((s) => s.id.includes(q) || (s.name || '').toLowerCase().includes(q));
+  // project commands in a coding project, then skills, then commands that plugins added (Studio → plugins: scorpi.command)
+  slashItems = [...projectCommands(), ...state.skills, ...pluginSkills()].filter((s) => s.id.includes(q) || (s.name || '').toLowerCase().includes(q));
   if (!slashItems.length) return hideSlash();
   slashIndex = Math.min(slashIndex, slashItems.length - 1);
   clear(els.slash);
   els.slash.dataset.kind = 'slash';
-  placeMenu(null);
   const list = els.slash.appendChild(h('div.slash-list'));
   slashItems.forEach((s, i) =>
     list.appendChild(
@@ -1950,6 +1978,7 @@ function updateSlash() {
     ),
   );
   els.slash.classList.remove('hidden');
+  placeMenu(null); // after it shows: a hidden menu is not measured, and it would keep an old (or no) position
 }
 function hideSlash() {
   els.slash.classList.add('hidden');
@@ -1958,6 +1987,23 @@ function hideSlash() {
 function pickSlash(i) {
   const s = slashItems[i];
   if (!s) return;
+  if (s.code) {
+    hideSlash();
+    els.input.value = '';
+    if (s.id === 'plan') {
+      composer.plan = true;
+      updateModeChip();
+      toast('Plan first', { body: 'Describe what to build: the agent shows a plan to approve before it changes anything.', timeout: 2600 });
+    } else if (s.id === 'undo') {
+      undoLastRun();
+    } else {
+      els.input.value = '/' + s.id + ' '; // Enter sends it; anything typed after it goes along
+    }
+    autosize();
+    updateSend();
+    els.input.focus();
+    return;
+  }
   setSkill(s.id);
   els.input.value = '';
   hideSlash();
@@ -2204,6 +2250,7 @@ export function initChat() {
   els.toolsBtn.addEventListener('click', toolsMenu);
   els.toolsBtn.dataset.popAnchor = '';
   els.modeBtn.addEventListener('click', modeMenu);
+  loadCodeCommands();
   els.modeBtn.dataset.popAnchor = '';
   els.modelBtn.addEventListener('click', modelMenu);
   els.modelBtn.dataset.popAnchor = '';

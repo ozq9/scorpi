@@ -22,7 +22,7 @@ import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import VERSION, agent, agents, db, discord, events, gallery, github, gitops, knowledge, llm, looks, music, notify, opencode, scheduler, updates, usage, voice
+from . import VERSION, agent, agents, coding, db, discord, events, gallery, github, gitops, knowledge, llm, looks, music, notify, opencode, scheduler, updates, usage, voice
 from .config import DATA_DIR, IS_WINDOWS, PUBLIC_DIR, SETTINGS, UPLOADS, WORKSPACE
 from .mcp import MANAGER, PRESETS
 from .tools import GROUPS, TOOLS, ToolError, catalog, check_access, module_available
@@ -572,7 +572,9 @@ def settings_set(h):
         for key in ("user_name", "system_prompt", "mcp_servers", "provider", "ollama_url", "openai_url", "openai_key",
                     "tool_policy", "tool_mode", "tool_groups", "allowed_paths", "blocked_paths", "secret", "ha_url", "ha_token",
                     "discord_presence", "discord_client_id", "port", "https_port", "fish_api_key", "fish_model", "fish_voice",
-                    "tts_engine", "tts_voice", "desktop_notifications", "ntfy_topic", "auto_update", "update_url", "github_token", "checkpoints"):
+                    "tts_engine", "tts_voice", "desktop_notifications", "ntfy_topic", "auto_update", "update_url", "github_token", "checkpoints",
+                    # a guest must not loosen what agents may do, nor point a provider at a server that would receive the key
+                    "autonomy", "cloud_urls", "cloud_accounts", "cloud_extra_models", "code_model", "expert_model", "coder_backend"):
             patch.pop(key, None)
         for key in [k for k in patch if k.startswith("key_") or k == "cloud_anon"]:
             patch.pop(key, None)
@@ -786,6 +788,11 @@ def chat(h):
     conv = db.get_my_conversation(cid) if cid else None  # someone else's chat id just starts a new chat
     project = str(body.get("project") or "")
     plan = body.get("mode") == "plan"  # the Code area's "Plan first": the coder proposes a plan to approve before building
+    shown = ""
+    words = text.split(None, 1)
+    if words and words[0].startswith("/") and words[0][1:].lower() in coding.COMMANDS and (project or (conv and agents.job_for_conversation(conv["id"]))):
+        # a project command (/init, /review, /test...): the agent gets its instructions, the chat shows what was typed
+        shown, text = text, coding.command_prompt(words[0][1:], words[1] if len(words) > 1 else "")
     if project and not conv:
         # the Code area: a message in a project goes to its agent, or starts the coder on it
         job = agents.latest_job(project)
@@ -793,7 +800,8 @@ def chat(h):
             conv = db.get_conversation(job.conv_id)
         else:
             try:
-                job = agents.assign("coder", text, title=body.get("title") or project.replace("-", " ").capitalize(), project=project, plan=plan)
+                job = agents.assign("coder", text, title=body.get("title") or project.replace("-", " ").capitalize(), project=project, plan=plan,
+                                    display=shown)
             except ValueError as exc:
                 return h.error(str(exc))
             return follow_run(h, job.run)
@@ -805,7 +813,7 @@ def chat(h):
         # an agent job's own conversation: the message goes to the agent, which carries on in the same chat
         busy = events.active_run_for(conv["id"])
         try:
-            job.message(text, plan=plan)
+            job.message(text, plan=plan, display=shown)
         except Exception as exc:
             return h.error(str(exc))
         return follow_run(h, job.run, len(job.run.events) if busy is job.run else 0)
@@ -1904,6 +1912,25 @@ def project_diff(h, path, folder):
             raise gitops.GitError("Unknown checkpoint.")
         files = gitops.checkpoint_diff(folder, path, sha, "now" if scope == "since" else "")
     h.send_json({"files": files, "base": base, "add": sum(f["add"] for f in files), "del": sum(f["del"] for f in files)})
+
+
+@_git_route("POST", "/review")
+def project_review(h, path, folder):
+    """A second model reviews the project's changes (Changes → Review)."""
+    body = h.body_json()
+    job = agents.latest_job(folder)
+    try:
+        out = coding.review(path, folder, str(body.get("base") or "").strip(), job.model_ref() if job else "", str(body.get("focus") or ""))
+    except llm.LLMError as exc:
+        raise ValueError(str(exc))
+    if out["model"]:
+        out["model_label"] = llm.label(out["model"])
+    h.send_json(out)
+
+
+@route("GET", "/api/code-commands")
+def code_commands(h):
+    h.send_json({"commands": [{"name": k, "description": v["description"], "icon": v["icon"]} for k, v in coding.COMMANDS.items()]})
 
 
 @_git_route("POST", "/git/init")

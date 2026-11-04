@@ -878,6 +878,64 @@ def process_stop(ctx, id):
     return Result("Stopped process %s (%s)." % (term.id, term.command[:120]))
 
 
+# ---------- a second model: opinions and reviews ----------
+
+@tool(
+    "ask_expert",
+    "Ask an independent second model (a senior engineer on another provider) for a second opinion: a bug you cannot find "
+    "after two tries, a design decision, a tricky algorithm, or your plan before a big change. It sees only what you send: "
+    "put the error, the relevant code and what you tried in context, or list files to include.",
+    {"question": "string: What you want to know", "context?": "string: Errors, code, what you tried",
+     "files?": "array<string>: Files whose contents to include (max 8)"},
+    group="code",
+)
+def ask_expert(ctx, question, context="", files=None):
+    from .. import coding, llm
+    parts = [str(question or "").strip()]
+    if context:
+        parts.append("Context:\n" + str(context)[:30000])
+    budget = 60000
+    for path in (files or [])[:8]:
+        full = resolve_path(path, must_exist=True)
+        try:
+            with open(full, encoding="utf-8", errors="replace") as fh:
+                text = fh.read(budget)
+        except OSError as exc:
+            raise ToolError("Cannot read %s: %s" % (full, exc))
+        budget -= len(text)
+        parts.append("File %s:\n```\n%s\n```" % (_rel(full, project_dir() or os.path.dirname(full)), text))
+        if budget <= 0:
+            break
+    current = getattr(getattr(ctx, "agent", None), "model", "") or ""
+    try:
+        answer, model = coding.ask("\n\n".join(parts), current=current)
+    except llm.LLMError as exc:
+        raise ToolError("The second model did not answer: %s" % exc)
+    return Result("Second opinion from %s:\n\n%s" % (llm.label(model), answer or "(no answer)"))
+
+
+@tool(
+    "review_changes",
+    "Code review of a project's changes by an independent second model: bugs, security problems, missing edge cases. "
+    "Reviews the uncommitted changes (or against base, a branch or commit), or what the last agent run changed. Use it "
+    "before reporting a bigger job as done, or when the user asks for a review.",
+    {"path?": "string: Project folder (default: the project)", "base?": "string: Compare with this branch or commit",
+     "focus?": "string: What to look at closely, e.g. 'the auth changes'"},
+    group="code",
+)
+def review_changes(ctx, path="", base="", focus=""):
+    from .. import coding, llm
+    folder = resolve_path(path or work_dir(), must_exist=True)
+    agent = getattr(ctx, "agent", None)
+    try:
+        out = coding.review(folder, getattr(agent, "project", "") or "", base, getattr(agent, "model", "") or "", focus)
+    except (llm.LLMError, gitops.GitError) as exc:
+        raise ToolError(str(exc))
+    if not out["review"]:
+        return Result("Nothing to review: no uncommitted changes and no recent agent run in %s." % folder)
+    return Result("Review of %s by %s:\n\n%s" % (out["scope"], llm.label(out["model"]), out["review"]))
+
+
 # ---------- git (read-only) ----------
 
 @tool(

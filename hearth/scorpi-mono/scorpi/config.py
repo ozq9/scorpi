@@ -46,6 +46,7 @@ DEFAULTS = {
     "cloud_extra_models": {},  # provider id -> "model-a, model-b" offered in addition to the live list
     "cloud_accounts": {},  # provider id -> account id its URLs need (Cloudflare)
     "code_model": "",  # model for the Code skill and coder sub-agents ("" = the chat model, "auto" = the best coder on offer)
+    "expert_model": "",  # second opinions and code reviews ("" = the best coder of another provider than the one working)
     "coder_backend": "auto",  # auto (OpenCode when installed) | scorpi (Scorpi's own tools)
     "checkpoints": True,  # save a project's files before and after every agent run (scorpi/gitops.py), to look at or undo
     "autonomy": "auto",  # ask | auto | full: what agents may do without asking (scorpi/safety.py)

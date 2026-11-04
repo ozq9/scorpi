@@ -5,6 +5,7 @@
 import { api } from '../lib/api.js';
 import { fmtRelative, h, icon } from '../lib/dom.js';
 import { diffList, diffStat } from '../lib/diff.js';
+import { renderMarkdown } from '../lib/md.js';
 import { confirmSheet, popover, promptSheet, sheet, switchEl, toast } from '../lib/ui.js';
 import { navigate } from '../router.js';
 import { bus } from '../store.js';
@@ -19,6 +20,28 @@ const loading = (text = 'Loading…') => h('div.pp-loading', h('span.job-pulse')
 const failNode = (err, retry) => h('div.pp-empty', icon('x'), h('b', 'That did not work'), h('span', err.message || String(err)), retry ? h('button.btn.small', { onclick: retry }, icon('refresh'), 'Try again') : null);
 
 /** Run an action with its button showing that it works; returns the result or undefined after a toast. */
+/** A second model reviews the changes; the findings open in a sheet with "Fix these" for the agent. */
+export async function reviewChanges(btn, slug) {
+  const out = await act(btn, () => api.post(base(slug) + '/review', {}));
+  if (!out) return;
+  if (!out.review) return toast('Nothing to review yet', { body: 'No uncommitted changes and no recent agent run.' });
+  const body = h('div.md.review-body');
+  body.innerHTML = renderMarkdown(out.review);
+  sheet({
+    title: 'Code review',
+    body: h('div', h('p.section-desc', `${out.model_label || out.model} reviewed ${out.scope}.`), body),
+    foot: (close) => [
+      h('button.btn.quiet', { onclick: close }, 'Close'),
+      h('button.btn.primary', {
+        onclick: () => {
+          close();
+          bus.emit('compose:send', { text: 'Fix these code review findings (skip any you are sure are wrong, and say why):\n\n' + out.review, display: 'Fix the code review findings' });
+        },
+      }, icon('wand'), 'Fix these'),
+    ],
+  });
+}
+
 async function act(btn, fn, done) {
   const label = btn ? btn.innerHTML : '';
   if (btn) {
@@ -78,6 +101,7 @@ async function runScope(body, ctx, s) {
     'div.pc-summary',
     h('div.pc-sum-text', h('b', res.files.length ? `${res.files.length} file${res.files.length === 1 ? '' : 's'} changed` : 'No changes yet'), ' ', diffStat(res.add, res.del),
       h('div.muted', (running ? 'Since the agent started' : 'In the last run') + ' · ' + fmtRelative(res.base.time))),
+    res.files.length && !running ? h('button.btn.small.quiet', { title: 'A second model reviews what changed', onclick: (e) => reviewChanges(e.currentTarget, d.slug) }, icon('eye'), 'Review') : null,
     res.files.length
       ? h('button.btn.small.quiet', {
           title: running ? 'Stop the agent first' : 'Put every file back as it was before this run',
@@ -112,6 +136,7 @@ async function workScope(body, ctx, s) {
     h('div.pc-sum-text',
       h('b', res.files.length ? `${res.files.length} uncommitted file${res.files.length === 1 ? '' : 's'}` : 'Everything is committed'), ' ', res.files.length ? diffStat(res.add, res.del) : null,
       h('div.muted', icon('branch', 'inline'), ' ', git.branch || 'detached', git.upstream ? ` · ${git.ahead ? '↑' + git.ahead + ' ' : ''}${git.behind ? '↓' + git.behind : ''}${!git.ahead && !git.behind ? 'in sync' : ''}` : git.github ? '' : ' · not on GitHub')),
+    res.files.length ? h('button.btn.small.quiet', { title: 'A second model reviews the uncommitted changes', onclick: (e) => reviewChanges(e.currentTarget, d.slug) }, icon('eye'), 'Review') : null,
   );
   const nodes = [head];
   if (res.files.length) {
