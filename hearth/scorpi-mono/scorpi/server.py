@@ -22,7 +22,7 @@ import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import VERSION, agent, agents, attempts, bench, coding, crash, db, discord, events, gallery, github, gitops, knowledge, limits, llm, looks, music, notify, opencode, privacy, scheduler, scores, updates, usage, voice
+from . import VERSION, agent, agents, attempts, backlog, bench, coding, crash, db, discord, events, gallery, github, gitops, knowledge, limits, llm, looks, music, notify, opencode, privacy, scheduler, scores, updates, usage, voice
 from .config import DATA_DIR, IS_WINDOWS, PUBLIC_DIR, SETTINGS, UPLOADS, WORKSPACE
 from .mcp import MANAGER, PRESETS
 from .tools import GROUPS, TOOLS, ToolError, catalog, check_access, module_available
@@ -575,7 +575,7 @@ def settings_set(h):
                     "tts_engine", "tts_voice", "desktop_notifications", "ntfy_topic", "auto_update", "update_url", "github_token", "checkpoints",
                     # a guest must not loosen what agents may do, nor point a provider at a server that would receive the key
                     "autonomy", "cloud_urls", "cloud_accounts", "cloud_extra_models", "code_model", "expert_model", "coder_backend", "hooks", "learn_models",
-                    "auto_resume", "local_fallback", "private_mode", "privacy_trusted", "redact_secrets", "step_routing", "fast_model", "check_packages", "visual_checks"):
+                    "auto_resume", "local_fallback", "backlog_window", "backlog_hours", "private_mode", "privacy_trusted", "redact_secrets", "step_routing", "fast_model", "check_packages", "visual_checks"):
             patch.pop(key, None)
         for key in [k for k in patch if k.startswith("key_") or k == "cloud_anon"]:
             patch.pop(key, None)
@@ -1611,6 +1611,75 @@ def visual_image(h, folder, name):
     if not os.path.isfile(path):
         return h.error("not found", 404)
     h.send_file(path, cache=True)
+
+
+# ---------- the queue: tasks for later, worked through overnight (scorpi/backlog.py) ----------
+
+def _owner_only(h):
+    if not h.is_owner:
+        h.error("Only the owner of this PC can do that.", 403)
+        return False
+    return True
+
+
+@route("GET", "/api/backlog")
+def backlog_get(h):
+    h.send_json(backlog.overview())
+
+
+@route("POST", "/api/backlog")
+def backlog_add(h):
+    if not _owner_only(h):
+        return None
+    body = h.body_json()
+    try:
+        item = backlog.add(str(body.get("slug") or ""), body.get("task"), title=body.get("title") or "")
+    except ValueError as exc:
+        return h.error(str(exc))
+    h.send_json(item)
+
+
+@route("POST", "/api/backlog/run-now")
+def backlog_run_now(h):
+    if not _owner_only(h):
+        return None
+    backlog.run_now()
+    backlog.tick()
+    h.send_json(backlog.overview())
+
+
+@route("POST", "/api/backlog/upkeep")
+def backlog_upkeep(h):
+    if not _owner_only(h):
+        return None
+    body = h.body_json()
+    try:
+        backlog.set_upkeep(str(body.get("slug") or ""), str(body.get("kind") or ""), str(body.get("every") or "week"), bool(body.get("on", True)))
+    except ValueError as exc:
+        return h.error(str(exc))
+    h.send_json(backlog.overview())
+
+
+@route("POST", "/api/backlog/([a-f0-9]+)/(move|retry)")
+def backlog_item_action(h, item_id, action):
+    if not _owner_only(h):
+        return None
+    try:
+        backlog.move(item_id, h.body_json().get("step") or 1) if action == "move" else backlog.retry(item_id)
+    except ValueError as exc:
+        return h.error(str(exc))
+    h.send_json(backlog.overview())
+
+
+@route("DELETE", "/api/backlog/([a-f0-9]+)")
+def backlog_remove(h, item_id):
+    if not _owner_only(h):
+        return None
+    try:
+        backlog.remove(item_id)
+    except ValueError as exc:
+        return h.error(str(exc))
+    h.send_json(backlog.overview())
 
 
 @route("GET", "/api/scores")

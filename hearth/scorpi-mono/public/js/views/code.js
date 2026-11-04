@@ -6,8 +6,9 @@ import { clear, debounce, fmtRelative, h, icon } from '../lib/dom.js';
 import { emptyState, field, sheet, toast } from '../lib/ui.js';
 import { state } from '../store.js';
 import { navigate } from '../router.js';
+import { queueSection } from './queue.js';
 
-const STATUS = { running: ['working', '.warn'], done: ['done', '.ok'], failed: ['failed', '.err'], stopped: ['stopped', ''], interrupted: ['paused', ''] };
+const STATUS = { running: ['working', '.warn'], waiting: ['paused', '.warn'], done: ['done', '.ok'], failed: ['failed', '.err'], stopped: ['stopped', ''], interrupted: ['paused', ''] };
 const IDEAS = [
   ['A landing page for my bakery', 'with opening hours, a menu and a contact form'],
   ['A snake game in the browser', 'with a high score and touch controls'],
@@ -77,6 +78,7 @@ export async function renderCode(el) {
         h('h3.section-title', 'Projects', h('span.count', projects.length || ''), h('span.rule')),
         projects.length ? h('div.project-grid', projects.map(projectCard)) : h('div.panel', emptyState('No projects yet', 'Describe one above and the coder starts right away.')),
       ),
+      queueSection(projects),
     ),
   );
   root.appendChild(page);

@@ -268,6 +268,7 @@ class Job:
         self.contract = None  # the approved tests the job builds against: {files, command, summary, content}
         self.pending_contract = None  # approved in this run: the build starts once it ends
         self.proof = None  # what the last run verified (proof.py)
+        self.queued = ""  # the queue item this job works on (backlog.py): approvals then go to the phone too
         self._published = 0.0
 
     def kwargs(self):
@@ -404,6 +405,10 @@ class Job:
                              "kind": summary.get("kind") or ""}
             self.activity = {"tests": "Waiting for you to review the tests", "test_change": "Asking you to change an approved test"}.get(
                 summary.get("kind"), "Waiting for you to review the plan" if summary.get("plan") else "Waiting for your approval")
+            if self.queued:
+                # a queued task runs while the user is away: the approval reaches them wherever they are
+                notify.send("Approval needed · %s" % self.title, (summary.get("title") or ev.get("tool") or "") + (" — " + summary["why"] if summary.get("why") else ""),
+                            level="urgent", link="/c/" + self.conv_id)
         elif kind == "plan_approved":
             self.approved_plan = ev.get("plan") or ""
             if ev.get("note"):

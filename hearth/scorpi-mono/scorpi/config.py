@@ -49,6 +49,8 @@ DEFAULTS = {
     "fast_model": "",  # quick model for side work ("" = automatic)
     "private_mode": False,  # everything only goes to providers that don't train on it, or local models (scorpi/privacy.py)
     "privacy_trusted": [],  # providers the user allows for private work anyway (e.g. after opting out of training there)
+    "backlog_window": "night",  # when the queue works: night (backlog_hours) | always | paused (scorpi/backlog.py)
+    "backlog_hours": [22, 7],  # from, until (local hours)
     "visual_checks": True,  # open a web project's page at the end of a run that changed it (scorpi/tools/visual.py)
     "check_packages": True,  # look packages up in their registry before an agent installs them (scorpi/packages.py)
     "redact_secrets": True,  # API keys, tokens and passwords are replaced by placeholders before reaching a cloud model

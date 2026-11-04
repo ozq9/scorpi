@@ -1639,9 +1639,29 @@ function modeMenu() {
     { name: 'Tests first', desc: 'Next message: approve the tests, then it builds until they pass.', icon: 'check', checked: composer.tests,
       onPick: () => { composer.tests = !composer.tests; composer.plan = false; updateModeChip(); } },
     state.project ? { name: 'Try several models', desc: 'Each model does it in a copy; keep the best one.', icon: 'bolt', onPick: () => startAttempts(els.input.value.trim()) } : null,
+    state.project ? { name: 'Queue it for later', desc: 'Done while you are away (overnight), with a report.', icon: 'clock', onPick: () => queueTask(els.input.value.trim()) } : null,
     'sep',
     ...AUTONOMY.map(([key, name, ic, desc]) => ({ name, desc, icon: ic, checked: current === key, onPick: () => setAutonomy(key) })),
   ]);
+}
+
+// The project's message goes to the queue instead (scorpi/backlog.py): worked on while the user is away.
+async function queueTask(text) {
+  const p = state.project;
+  if (!p) return;
+  if (!text) {
+    els.input.focus();
+    return toast('Type the task first, then queue it', 'warn');
+  }
+  try {
+    await api.post('/api/backlog', { slug: p.slug, task: text });
+    els.input.value = '';
+    autosize();
+    updateSend();
+    toast('Queued for later', { body: 'Scorpi works on it in the queue\'s hours (Code → Queue).', timeout: 3000 });
+  } catch (err) {
+    toast(err.message, 'error');
+  }
 }
 
 /** Shift+Tab: Auto → Plan first → Tests first → Full auto → Ask first → Auto. */

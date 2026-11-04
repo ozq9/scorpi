@@ -98,6 +98,8 @@ def _tick():
     from . import agents, limits
     agents.tick(now)
     limits.tick(now)  # work that paused because every model was at its usage limit
+    from . import backlog
+    backlog.tick(now)  # the queue of tasks for later (overnight)
 
 
 def _loop():
