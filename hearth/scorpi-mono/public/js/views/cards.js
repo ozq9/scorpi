@@ -3,6 +3,7 @@
 import { api, fileUrl } from '../lib/api.js';
 import { baseName, extOf, fmtDate, fmtSize, fmtTime, h, icon, loadScript, loadStyle } from '../lib/dom.js';
 import { toast } from '../lib/ui.js';
+import { diffList, diffStat } from '../lib/diff.js';
 import { fileChip, kindOf, linkEmbed, openViewer } from '../lib/viewer.js';
 import { bus } from '../store.js';
 import { agentCard, jobPlaceholder } from './agents.js';
@@ -74,6 +75,20 @@ const renderers = {
         ? h('div.imgs', d.images.map((p, i) => h('img', { src: fileUrl(p), onclick: () => openViewer(d.images.map((x) => ({ path: x, kind: 'image' })), i) })))
         : null,
       (d.files || []).length ? h('div.out.files', d.files.map((p) => fileChip({ path: p }))) : null,
+    );
+  },
+
+  diff(d) {
+    const files = d.files || [];
+    const add = files.reduce((n, f) => n + (f.add || 0), 0);
+    const del = files.reduce((n, f) => n + (f.del || 0), 0);
+    const title = files.length === 1 ? files[0].path.split('/').pop() : files.length + ' files';
+    const problems = (d.checks || '').startsWith('PROBLEMS');
+    return h(
+      'div.card.diff',
+      head('diff', title, diffStat(add, del)),
+      diffList(files, { open: files.length <= 2 }),
+      d.checks ? h('div.diff-checks' + (problems ? '.bad' : '.good'), icon(problems ? 'x' : 'check'), h('span', d.checks.replace(/^PROBLEMS FOUND — fix them now:\n/, ''))) : null,
     );
   },
 

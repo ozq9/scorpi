@@ -9,7 +9,7 @@ import time
 import uuid
 
 from ..config import IS_WINDOWS, WORKSPACE
-from . import Result, ToolError, resolve_path, tool
+from . import Result, ToolError, project_dir, resolve_path, tool, work_dir
 
 OUTPUT_LIMIT = 20_000
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".svg", ".gif", ".webp")
@@ -86,7 +86,7 @@ def _cwd(cwd):
         path = resolve_path(cwd)
         os.makedirs(path, exist_ok=True)
         return path
-    return WORKSPACE
+    return work_dir()
 
 
 @tool(
@@ -133,7 +133,7 @@ def run_javascript(ctx, code, timeout=60):
     script = os.path.join(script_dir, "run_%s.mjs" % uuid.uuid4().hex[:8])
     with open(script, "w", encoding="utf-8") as fh:
         fh.write(code)
-    result = _execute([node, script], WORKSPACE, min(int(timeout or 60), 900))
+    result = _execute([node, script], work_dir(), min(int(timeout or 60), 900))
     try:
         os.remove(script)
     except OSError:
@@ -143,14 +143,21 @@ def run_javascript(ctx, code, timeout=60):
 
 @tool(
     "run_shell",
-    "Run a shell command on the host (PowerShell on Windows, bash elsewhere). Use for installing software, git, "
-    "system configuration, controlling programs with their CLIs, etc.",
-    {"command": "string: Command line", "timeout?": "integer: Seconds (default 120)", "cwd?": "string: Working directory"},
+    "Run a shell command on the host (PowerShell on Windows, bash elsewhere). Use for installing software, git, builds, "
+    "tests, system configuration, controlling programs with their CLIs, etc. Starts in the project folder when you work "
+    "on a project. For servers and watchers that keep running (npm run dev, python -m http.server, vite...) set "
+    "background=true: it returns at once with a process id and the first output (and any local address); read more "
+    "with process_output and stop it with process_stop.",
+    {"command": "string: Command line", "timeout?": "integer: Seconds (default 120)", "cwd?": "string: Working directory",
+     "background?": "boolean: Keep it running in the background (dev servers, watchers)"},
     group="code",
     risk="danger",
 )
-def run_shell(ctx, command, timeout=120, cwd=""):
-    folder = _cwd(cwd) if cwd else os.path.expanduser("~")
+def run_shell(ctx, command, timeout=120, cwd="", background=False):
+    folder = _cwd(cwd) if cwd else (project_dir() or os.path.expanduser("~"))
+    if background:
+        from . import dev
+        return dev.start_background(ctx, command, folder)
     if IS_WINDOWS:
         cmd = ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
                "[Console]::OutputEncoding=[Text.Encoding]::UTF8; " + command]

@@ -296,6 +296,15 @@ html.style-visual .trace:not(.open) { margin: var(--s-2) 0; }
 .card.code .out pre { background: transparent; }
 .card.code .out .err { color: var(--danger); }
 .card.code .out.files { display: flex; flex-wrap: wrap; gap: var(--s-4); padding: var(--s-5) var(--s-7); }
+/* an agent's edit: the change as a diff, then the syntax checks of the new code */
+.card.diff .dv { padding: var(--s-4); gap: var(--s-2); max-height: 420px; overflow: auto; }
+.card.diff .card-head .dv-n { margin-left: auto; }
+.card.diff .diff-checks { display: flex; gap: var(--s-4); align-items: flex-start; padding: var(--s-4) var(--s-7); border-top: 1px solid var(--line-2);
+  font: 12px/1.5 var(--font-mono); white-space: pre-wrap; word-break: break-word; }
+.card.diff .diff-checks svg { width: 14px; height: 14px; flex: none; margin-top: 2px; }
+.card.diff .diff-checks.good { color: var(--muted); }
+.card.diff .diff-checks.good svg { color: var(--ok); }
+.card.diff .diff-checks.bad { color: var(--danger); }
 .card.code .out.files .file-chip { margin: 0; width: auto; }
 .card.code .imgs { display: flex; gap: var(--s-5); padding: var(--s-5) var(--s-7); flex-wrap: wrap; border-top: 1px solid var(--line-2); }
 .card.code .imgs img { max-height: 240px; max-width: 100%; border-radius: var(--r-3); cursor: zoom-in; }

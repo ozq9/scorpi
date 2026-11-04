@@ -1,5 +1,7 @@
 """Tool registry. Each tool is a plain function registered with a compact schema."""
 
+import contextlib
+import contextvars
 import importlib.util
 import os
 import re
@@ -7,6 +9,28 @@ import re
 from ..config import SETTINGS, WORKSPACE
 
 TOOLS = {}
+
+# The folder an agent works in (a coding project). Relative paths resolve inside it, and commands start there.
+_base_dir = contextvars.ContextVar("scorpi_base_dir", default="")
+
+
+@contextlib.contextmanager
+def base_dir(path):
+    token = _base_dir.set(path or "")
+    try:
+        yield
+    finally:
+        _base_dir.reset(token)
+
+
+def work_dir():
+    """The current agent's project folder, else the workspace."""
+    return _base_dir.get() or WORKSPACE
+
+
+def project_dir():
+    """The current agent's project folder, or "" outside a project."""
+    return _base_dir.get()
 
 GROUPS = {
     "core": ("Core", "Memory, plans, notifications, calculations and tool loading."),
@@ -32,7 +56,7 @@ GROUP_HINTS = {
     "files": r"file|folder|director|desktop|download|document|\bpath\b|\.txt|\.md|disk|drive|ordner|datei",
     "docs": r"pdf|docx|word|excel|xlsx|spreadsheet|powerpoint|pptx|contract|vertrag|report|invoice|document|summar|compare|resume|letter",
     "code": r"python|javascript|\bjs\b|script|code|run|execute|calculat|compute|powershell|terminal|command|install|program|"
-            r"github|pull request|\bpr\b|\bissues?\b|\brepo|commit|branch|\bci\b",
+            r"github|pull request|\bpr\b|\bissues?\b|\brepo|commit|branch|\bci\b|\btests?\b|\bbug|debug|refactor|lint|compile|build",
     "web": r"search|google|web|internet|news|latest|look up|website|url|http|api|research|source|cite|verify|wiki|today|current|price",
     "data": r"csv|dataset|data|chart|graph|plot|statistic|analy|table|excel|average|trend",
     "media": r"image|picture|photo|draw|illustrat|logo|icon|diagram|flowchart|render|generate.*(art|visual)|audio|mp3|transcri|voice|sketch|poster|"
@@ -179,12 +203,12 @@ def catalog():
 
 
 def resolve_path(path, must_exist=False):
-    """Expand a user/model supplied path. Relative paths land in the workspace."""
+    """Expand a user/model supplied path. Relative paths land in the agent's project folder, else the workspace."""
     if not path:
         raise ToolError("A path is required.")
     path = os.path.expandvars(os.path.expanduser(str(path).strip().strip('"')))
     if not os.path.isabs(path):
-        path = os.path.join(WORKSPACE, path)
+        path = os.path.join(work_dir(), path)
     path = os.path.abspath(path)
     check_access(path)
     if must_exist and not os.path.exists(path):
@@ -210,7 +234,7 @@ def check_access(path):
 
 
 def load_all():
-    from . import agenda, canvas, code, computer, core, data, docs, files, looks, media, places, radio, records, repo, system, web  # noqa: F401
+    from . import agenda, canvas, code, computer, core, data, dev, docs, files, looks, media, places, radio, records, repo, system, web  # noqa: F401
     from .. import knowledge, agents_tools  # noqa: F401
 
 

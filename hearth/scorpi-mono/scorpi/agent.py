@@ -13,7 +13,7 @@ import traceback
 
 from . import db, events, llm, usage
 from .config import SETTINGS, UPLOADS, WORKSPACE
-from .tools import TOOLS, Result, ToolError, policy, schema_for, select_tools
+from .tools import TOOLS, Result, ToolError, base_dir, policy, schema_for, select_tools
 
 # ---------- skills: procedures layered on top of the tools ----------
 
@@ -72,7 +72,7 @@ SKILLS = {
         "icon": "code",
         "description": "Write, run and debug code on the PC.",
         "groups": ["code", "files"],
-        "instructions": "You are in CODE mode. Write clean, complete code. Run it with run_python/run_javascript/run_shell to verify it works before presenting it. Save multi-file work into the workspace with write_file and report paths.",
+        "instructions": "You are in CODE mode. Write clean, complete code. In an existing codebase look first (repo_map, grep, glob, read_file), then change files with edit_file or apply_patch and fix any syntax problems the result reports. Run the code with run_python/run_javascript/run_shell or run_tests to verify it works before presenting it. Save multi-file work into the workspace with write_file and report paths.",
     },
     "data": {
         "name": "Analyst",
@@ -127,13 +127,15 @@ class Ctx:
 
 class Agent:
     def __init__(self, run, model=None, skill=None, groups=None, depth=0, label="", emit=None,
-                 persona=None, max_steps=None, auto_approve=False, pin_model=""):
+                 persona=None, max_steps=None, auto_approve=False, pin_model="", workdir="", project=""):
         self.run = run
         # coding work (the Code skill, coder sub-agents) can run on its own model, e.g. an OpenCode Go plan;
         # a dedicated agent's own model (pin_model) wins over both
         coder = llm.coding_model() if skill == "code" else ""
         self.model = pin_model or coder or model or llm.default_model()
-        self.persona = persona  # {"name", "instructions", "workdir"} for a dedicated agent working in the background
+        self.persona = persona  # {"name", "instructions", "workdir", "project"} for a dedicated agent working in the background
+        self.workdir = workdir or (persona or {}).get("workdir") or ""  # the project folder tools work in
+        self.project = project or (persona or {}).get("project") or ""
         self.max_steps = max_steps
         self.auto_approve = auto_approve
         self.skill = all_skills().get(skill) if skill else None
@@ -148,6 +150,7 @@ class Agent:
         self.no_tools = False
         self.switched = ""
         self.eyes = ""  # vision model describing images for a text-only model this turn
+        self.seen = {}  # file -> modification time when this agent last read or wrote it (to notice others' changes)
 
     def emit(self, event):
         self._emit(event)
@@ -237,7 +240,7 @@ class Agent:
                 "your progress, and verify your work before you finish. New messages from the user may arrive while you "
                 "work; follow them. End with a concise report: what you did, where the results are (full paths), how to "
                 "open or run them, and anything left open." % p["name"].upper()
-                + ("\nWork inside this folder unless told otherwise: %s" % p["workdir"] if p.get("workdir") else "")
+                + ("\nWork inside this folder unless told otherwise: %s (relative paths and commands start there)" % p["workdir"] if p.get("workdir") else "")
                 + ("\n\nYour role:\n" + p["instructions"] if p.get("instructions") else ""))
         elif self.depth == 0 and self.run and self.run.origin in ("chat", "agent_update"):
             from . import agents
@@ -446,7 +449,8 @@ class Agent:
             sig = inspect.signature(fn)
             accepts_kwargs = any(p.kind == p.VAR_KEYWORD for p in sig.parameters.values())
             clean = args if accepts_kwargs else {k: v for k, v in args.items() if k in sig.parameters and k != "ctx"}
-            result = fn(Ctx(self), **clean)
+            with base_dir(self.workdir):
+                result = fn(Ctx(self), **clean)
             if not isinstance(result, Result):
                 result = Result(str(result))
             return result
@@ -752,7 +756,8 @@ def run_subagent(parent_ctx, kind, task):
         if event["type"] in ("tool_start", "tool_end", "status", "notice"):
             parent.emit(dict(event, agent=kind))
 
-    sub = Agent(parent.run, model=parent.model, skill=spec["skill"], groups=spec["groups"] + ["core"], depth=parent.depth + 1, label=kind, emit=relay)
+    sub = Agent(parent.run, model=parent.model, skill=spec["skill"], groups=spec["groups"] + ["core"], depth=parent.depth + 1, label=kind, emit=relay,
+                workdir=parent.workdir, project=parent.project)
     text = sub.run_turn([{"role": "user", "content": "You are the %s sub-agent. Complete this task and reply with a self-contained result "
                                                        "(facts, paths, sources) for the main assistant:\n\n%s" % (kind, task)}], task)
     parent.files.extend(sub.files)
@@ -782,7 +787,7 @@ def run_subagents(parent_ctx, tasks):
     if len(clean) > 8:
         raise ToolError("At most 8 helpers per call; group the work into bigger pieces.")
     groups = sorted(parent.groups_override or parent.extra_groups or {"code", "files"})
-    workdir = (parent.persona or {}).get("workdir") or ""
+    workdir = parent.workdir
     tag = os.urandom(2).hex()
 
     def one(index, spec):
@@ -804,7 +809,8 @@ def run_subagents(parent_ctx, tasks):
 
         emit(status="running", task=spec["task"][:600], activity="Starting", tools=0, model=parent.model)
         sub = Agent(parent.run, model=parent.model, skill=parent.skill_id or None, groups=list(groups) + ["core"], depth=parent.depth + 1,
-                    label=label, emit=relay, auto_approve=parent.auto_approve, max_steps=max(12, int(parent.max_steps or 24) // 2))
+                    label=label, emit=relay, auto_approve=parent.auto_approve, max_steps=max(12, int(parent.max_steps or 24) // 2),
+                    workdir=parent.workdir, project=parent.project)
         sub.model = parent.model  # same model as the job, also for coding work with its own coding model
         prompt = ("You are %s, one of several helper agents working IN PARALLEL on parts of one job. Do only your part; other "
                   "helpers handle the rest at the same time, so do not touch files outside your part.%s\n\nYour part:\n%s\n\n"

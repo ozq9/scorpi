@@ -17,12 +17,13 @@ PROJECTS = os.path.join(WORKSPACE, "projects")
 LINKS_PATH = os.path.join(DATA_DIR, "project_links.json")  # projects that live in a folder of the user's own: slug -> path
 
 CODER_ROLE = """You are a senior software engineer. For every job:
-1. Understand the goal and choose a simple, robust stack (websites: plain HTML, CSS and JavaScript unless a framework is asked for). If the project folder already has files, read them first and continue from there.
+1. Understand the goal. If the project folder already has files, get the lay of the land first: repo_map shows every file with its classes and functions, grep finds where something is defined or used, glob finds files by name, git_read shows recent changes. Read the files you will change before changing them. Otherwise choose a simple, robust stack (websites: plain HTML, CSS and JavaScript unless a framework is asked for).
 2. Call update_plan with concrete steps (files to create, features, checks) and keep it current.
-3. Write complete, working files with write_file, one file per call, and change existing ones with edit_file. No placeholders, TODOs or "rest stays the same".
-4. Test everything: run scripts with run_python or run_shell (for example node --check app.js, python -m py_compile main.py, npm test). Read the errors, fix them and run again until it works. For websites check that every linked file exists and the scripts have no syntax errors.
-5. Add a short README.md: what it is and how to open or run it.
-6. Report: the features, the files with full paths, exactly how to open or run it (e.g. the full path of index.html) and ideas for next steps."""
+3. Write new files completely with write_file. Change existing files with edit_file (a unique snippet and its replacement; several changes to one file in one call with edits=[...]) or apply_patch for changes across several files. No placeholders, TODOs or "rest stays the same".
+4. Every write and edit reports syntax checks. When it says PROBLEMS FOUND, fix them before anything else.
+5. Test everything: run_tests runs the project's tests; check_code checks a whole folder (and that web pages link to files that exist); run scripts with run_python or run_shell. Start servers and watchers with run_shell(background=true), read them with process_output and stop them with process_stop. Read the errors, fix them and run again until it works.
+6. Add a short README.md: what it is and how to open or run it.
+7. Report: the features, the files with full paths, exactly how to open or run it (e.g. the full path of index.html or the local address of a running server) and ideas for next steps."""
 
 BUILTIN = [
     {"id": "coder", "name": "Coder", "icon": "code", "skill": "code", "groups": ["code", "files", "web", "docs"], "max_steps": 80,
@@ -38,6 +39,10 @@ BUILTIN = [
     {"id": "operator", "name": "Operator", "icon": "monitor", "skill": "workflow", "groups": ["computer", "system", "files", "web"], "max_steps": 40,
      "description": "Operates the PC: programs, windows and a real browser.", "instructions": ""},
 ]
+
+# Earlier default instructions of built-in agents: an install whose agent still has one of them gets the new default
+# (instructions the user changed are kept).
+PREVIOUS_DEFAULTS = {"coder": ['You are a senior software engineer. For every job:\n1. Understand the goal and choose a simple, robust stack (websites: plain HTML, CSS and JavaScript unless a framework is asked for). If the project folder already has files, read them first and continue from there.\n2. Call update_plan with concrete steps (files to create, features, checks) and keep it current.\n3. Write complete, working files with write_file, one file per call, and change existing ones with edit_file. No placeholders, TODOs or "rest stays the same".\n4. Test everything: run scripts with run_python or run_shell (for example node --check app.js, python -m py_compile main.py, npm test). Read the errors, fix them and run again until it works. For websites check that every linked file exists and the scripts have no syntax errors.\n5. Add a short README.md: what it is and how to open or run it.\n6. Report: the features, the files with full paths, exactly how to open or run it (e.g. the full path of index.html) and ideas for next steps.']}
 
 FIELDS = ("name", "icon", "description", "instructions", "groups", "skill", "model", "auto_approve", "max_steps",
           "schedule", "action", "task", "enabled")
@@ -55,6 +60,9 @@ def init():
              "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
              (b["id"], b["name"], "builtin", b["icon"], b["description"], b["instructions"], json.dumps(b["groups"]), b["skill"],
               b["max_steps"], now, now))
+        row = db.one("SELECT instructions FROM agents WHERE id=?", (b["id"],))
+        if row and row["instructions"] != b["instructions"] and row["instructions"] in PREVIOUS_DEFAULTS.get(b["id"], []):
+            db.x("UPDATE agents SET instructions=?, updated=? WHERE id=?", (b["instructions"], now, b["id"]))
     # schedules missed while the PC was off run at their next slot instead of all at once
     for a in db.q("SELECT * FROM agents WHERE enabled=1 AND schedule!=''"):
         if not a["next_run"] or a["next_run"] < now - 300:
@@ -227,7 +235,7 @@ class Job:
         house = project_rules(self.workdir)
         if house:
             instructions += "\n\nThis project's own instructions (%s), follow them:\n%s" % house
-        return {"persona": {"name": a["name"], "instructions": instructions, "workdir": self.workdir},
+        return {"persona": {"name": a["name"], "instructions": instructions, "workdir": self.workdir, "project": self.project},
                 "max_steps": int(a.get("max_steps") or 40), "auto_approve": bool(a.get("auto_approve")),
                 "pin_model": self.model or a.get("model") or ""}
 
@@ -467,6 +475,11 @@ def activity(name, args, sub=None):
         "screenshot": "Looking at the screen", "browser": "Using the browser", "make_chart": "Drawing a chart",
         "analyze_data": "Inspecting %s" % base(a.get("path")), "delegate": "Asking the %s sub-agent" % a.get("agent", ""),
         "lsp": "Checking the code", "task": "Starting a helper agent",
+        "grep": "Searching the code for %s" % str(a.get("pattern", ""))[:60], "glob": "Finding files %s" % a.get("pattern", ""),
+        "repo_map": "Mapping the codebase", "apply_patch": "Applying a patch", "check_code": "Checking the code",
+        "run_tests": "Running the tests%s" % (": " + first(a.get("command")) if a.get("command") else ""),
+        "process_output": "Reading a background process", "process_stop": "Stopping a background process",
+        "git_read": "Reading git %s" % a.get("action", ""), "ask_expert": "Asking a second model", "submit_plan": "Proposing a plan",
         "spawn_helpers": "Starting %d helpers in parallel" % len(a.get("helpers") or []), "set_agent_model": "Switching the model",
     }
     text = labels.get(name) or name.replace("_", " ").capitalize()
