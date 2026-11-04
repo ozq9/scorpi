@@ -248,7 +248,7 @@ agent to add a gallery"): the chat assistant passes it on.
 `repo` scope. Then *Code → Clone from GitHub* lists your repositories (public ones clone without an account too), and
 *Open a folder on this PC* works on any existing folder in place. Git logins use the token as a header for that one
 command; it is never written into a repository. The agents get `github` (issues, pull requests, CI) and
-`github_pull_request`. A project's `AGENTS.md` (or `CLAUDE.md`) is followed by the coder.
+`github_pull_request`. A project's rules for coding agents are followed by the coder (see *The coding agent* below).
 
 **Write / Voice** (toggle in the composer, Ctrl+Shift+Space): in Voice you talk to the open conversation or project
 hands-free. Talk over Scorpi at any time: your voice stops the speech, and while it works what you say reaches it right
@@ -273,11 +273,73 @@ and edit each agent (instructions, tools, model, autonomy).
 running and notify you, sub-agents (`delegate`), scheduled automations with webhooks, a knowledge base with
 retrieval (RAG), and per-tool permissions (Allow / Ask / Off) with approval cards on every device.
 
+## The coding agent
+
+What the Coder does on Scorpi's own engine (*Basic*, no OpenCode needed), on any model, including free ones:
+
+- **Code tools**: `grep` (regular expressions across the project, skipping dependencies and build output), `glob`,
+  `repo_map` (every source file with its classes, functions and signatures, for Python, JS/TS, Go, Rust, Java, Kotlin,
+  C#, Swift, C/C++, Ruby, PHP, Lua, Dart and Markdown), `read_file` with line numbers, `edit_file` (a unique snippet, or
+  several edits in one call, all or nothing; tolerant of copied line numbers, trailing spaces and indentation, which it
+  shifts to the real one; the closest text when nothing matches), `apply_patch` (Codex `*** Begin Patch` or unified diffs,
+  atomic), `check_code`, `run_tests` (finds npm/pnpm/yarn/bun, pytest/unittest, go, cargo, mvn, gradle, dotnet, deno,
+  mix, rspec, phpunit or `make test`), read-only `git_read`, and background processes: `run_shell(background=true)` starts
+  a dev server or watcher that shows up in the project's *Terminal* tab, with `process_output` and `process_stop`.
+- **Checks after every change**: each write, edit and patch is checked for syntax errors (Python, JavaScript, JSON, CSS,
+  HTML that links to missing files, YAML, TOML, PHP, shell, Ruby, Perl, Lua) and shows in the chat as a diff with the
+  result; problems go straight back to the agent. A file someone else changed since the agent read it is never overwritten.
+- **Plan first** (the mode chip in a project's prompt box, Shift+Tab, `/plan`, or *"show me a plan first"* in chat): the
+  coder looks around with read-only tools and proposes a plan. Approve it, request changes in words (it revises and asks
+  again) or reject it; once approved it builds the plan on its normal engine and the plan becomes the job's checklist.
+- **Autonomy** (*Connect → Tools & permissions*, or the mode chip): *Ask first*, *Auto* (default) or *Full auto*.
+  `scorpi/safety.py` sorts every command into read, dev, edit, risky or blocked. Read-only commands never ask; in Auto,
+  builds, tests, running the project and file changes inside the project folder go ahead (every run can be undone);
+  Full auto still asks before destructive commands (deleting folders, force pushes, hard resets, killing programs);
+  wiping a disk or the home folder is refused at every level. Approval cards say why they ask.
+- **Project commands** in a project's `/` menu: `/init` writes `AGENTS.md`, `/review`, `/test` (run, fix, repeat until
+  green), `/fix` (checks, tests and build), `/explain`, `/security`, `/plan` and `/undo` (the last run's files back).
+- **A second opinion**: `ask_expert` asks another model (by default the strongest coder of a different provider; set it
+  as `expert_model`) about a stubborn bug, a design or a plan; `review_changes` and *Changes → Review* have it review the
+  uncommitted changes, a branch or the last run, and *Fix these* hands the findings to the coder.
+- **Long jobs on small models**: before each model call the turn is measured against the model's budget (its listed
+  context window, a limit learned from "request too large" answers, or `num_ctx` locally). Old tool output is trimmed
+  first, then older messages, then the model summarizes the earlier steps; a too-large request is shortened and retried
+  on the same model instead of switching providers.
+- **Rules files**: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `CONVENTIONS.md`, `.cursorrules`, `.cursor/rules/*.mdc` (with
+  their globs), `.clinerules`, `.windsurfrules`, Roo/Kilo rules, `.github/copilot-instructions.md` and `.scorpi/rules/`
+  are all read (identical files once); `AGENTS.md` files in subfolders are pointed out.
+- **Hooks** (*Connect → Tools & permissions → Hooks*): your own commands after edits (formatters), before commands (a
+  required one can veto) and before the agent finishes in a project (a required one that fails sends it back to work,
+  e.g. *tests must pass*). They come only from your settings, never from a repository.
+- Relative paths and commands start in the project folder, also for parallel helpers.
+
+### scorpi-code: the coder in a terminal
+
+`scorpi-code` (Windows: `scorpi-code.cmd`, in the app folder; add it to PATH) runs the same coder in any folder, with the
+app's models, keys and settings. The Scorpi server does not need to run; the folder appears in the app's *Code* area with
+the terminal's conversation and checkpoints.
+
+```
+scorpi-code                          talk to the coder in this folder
+scorpi-code "the login test fails"   start with a task, then keep talking
+scorpi-code --plan "add dark mode"   approve a plan before anything changes
+scorpi-code -p "update the README"   one task, no questions, answer on stdout (scripts and CI; --full allows more)
+scorpi-code -c                       continue the last conversation here
+scorpi-code -m "glm 5"               another model (loose names work)
+```
+
+At the prompt: `/init /review /test /fix /explain /security`, `/plan`, `/ask /auto /full`, `/model`, `/undo`, `/cost`,
+`/clear`, `/exit`; `@path` includes a file; `!command` runs a command and passes its output along with your next message;
+Ctrl+C stops the agent.
+
 ## Privacy & safety
 
 - Data lives in `ai/data/` (SQLite database, settings, workspace, uploads). It is not committed to git.
 - Reading is allowed by default; running code, controlling the PC, deleting and sending data ask for approval.
-  Change any tool in **Connect → Tools & permissions**, and restrict folders there.
+  Change any tool in **Connect → Tools & permissions**, and restrict folders there. *Agent autonomy* decides which
+  commands go ahead without asking (see *The coding agent*); commands that would wipe a disk or the home folder never run.
+- Guests (people who sign in on another device with their own name) cannot change models, provider URLs, keys,
+  autonomy, hooks or anything else that touches the host's security.
 - Remote devices need the PIN; cross-site requests and DNS-rebinding attempts are rejected.
 
 ## Layout
@@ -287,5 +349,9 @@ ai/
   server.py          start the server            desktop.py   open the app window
   scorpi/            backend: agent loop, LLM providers, MCP client, scheduler, voice, RAG, HTTP API
   scorpi/tools/      tool modules (files, docs, code, web, data, media, computer, system, maps, agenda, records)
+  scorpi/cli.py      scorpi-code, the coder in a terminal        scorpi/safety.py  how risky a command is
+  scorpi/coding.py   second opinions, reviews, project commands  scorpi/hooks.py   the user's hooks
+  scorpi/compact.py  keeps long turns inside the model's budget  scorpi/codecheck.py  syntax checks after edits
   public/            the web app (no build step): index.html, css/app.css, js/
+  tests/             python -m unittest discover -s tests -t .   (a mock model server, no keys needed)
 ```

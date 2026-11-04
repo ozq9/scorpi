@@ -146,3 +146,86 @@ if (still) {
   }, { threshold: 0.5 }).observe(screen);
   replay.addEventListener('click', playDemo);
 }
+
+// ---------- the coding agent: a scorpi-code session typing itself out (#code) ----------
+// [kind, text]: kind "cmd" and "answer" are typed, the rest appear line by line. Colour only where it means something.
+const SESSION = [
+  ['cmd', 'scorpi-code --plan "add a dark mode toggle"'],
+  ['b', 'Scorpi Code', ' 1.5 · ~/projects/recipe-box'],
+  ['dim', 'model Groq · qwen3-coder · autonomy auto · /help for commands'],
+  ['step', 'Mapping the codebase'],
+  ['out', 'Map of ~/projects/recipe-box: 6 source files'],
+  ['step', 'Searching the code for theme|color'],
+  ['out', '7 matches in 2 files'],
+  ['plan', 'Plan: Dark mode toggle'],
+  ['line', '  1. style.css: colour tokens for light and dark'],
+  ['line', '  2. app.js: a toggle that remembers the choice'],
+  ['line', '  3. index.html: the button in the header'],
+  ['ask', 'Approve and build it? [y]es / [c]hange / [n]o: ', 'y'],
+  ['step', 'Editing style.css'],
+  ['out', 'style.css', ' +14 -3'],
+  ['del', '   12 - :root { --bg: #fff; --ink: #222; }'],
+  ['add', '   12 + :root[data-theme="dark"] { --bg: #111; --ink: #eee; }'],
+  ['dim', '    Checks passed (style.css).'],
+  ['step', 'Editing app.js'],
+  ['out', 'app.js', ' +9'],
+  ['step', 'Running the tests'],
+  ['ok', '  ⎿ exit 0 · 12 passed'],
+  ['answer', 'Added a dark mode toggle to the header. It follows the system until you pick one, and the tests pass.'],
+];
+const term = document.querySelector('[data-term]');
+const termReplay = document.querySelector('[data-term-replay]');
+function termLine(kind, text, extra) {
+  const row = document.createElement('div');
+  const span = (cls, t) => { const s = document.createElement('span'); if (cls) s.className = cls; s.textContent = t; return s; };
+  if (kind === 'cmd') row.append(span('t-faint', '$ '), span('', text));
+  else if (kind === 'b') row.append(span('t-b', text), span('t-dim', extra));
+  else if (kind === 'step') row.append(span('t-dim', '● '), span('', text));
+  else if (kind === 'out') row.append(span('t-dim', '  ⎿ ' + text), extra ? span(extra.includes('-') ? 't-dim' : 't-add', extra) : '');
+  else if (kind === 'plan') row.append(span('t-b', text));
+  else if (kind === 'ask') row.append(span('t-b', text), span('', extra));
+  else if (kind === 'answer') row.append(document.createElement('br'), span('', text));
+  else row.append(span({ dim: 't-dim', add: 't-add', del: 't-del', ok: 't-ok' }[kind] || '', text));
+  return row;
+}
+let termRun = 0;
+async function playTerm() {
+  const id = ++termRun;
+  termReplay.hidden = true;
+  term.replaceChildren();
+  const cursor = document.createElement('span');
+  cursor.className = 't-cur';
+  for (const [kind, text, extra] of SESSION) {
+    if (id !== termRun) return;
+    if (kind === 'cmd' || kind === 'answer') {
+      const row = termLine(kind, '', extra);
+      const target = row.lastChild;
+      term.append(row);
+      row.append(cursor);
+      for (const ch of text) {
+        if (id !== termRun) return;
+        target.textContent += ch;
+        await wait(kind === 'cmd' ? 38 + Math.random() * 40 : 12);
+      }
+      await wait(kind === 'cmd' ? 500 : 200);
+    } else {
+      term.append(termLine(kind, text, extra));
+      term.lastChild.append(cursor);
+      await wait(kind === 'ask' ? 900 : kind === 'step' ? 520 : 240);
+    }
+  }
+  const prompt = document.createElement('div');
+  prompt.append(document.createElement('br'), Object.assign(document.createElement('span'), { className: 't-b', textContent: '› ' }), cursor);
+  term.append(prompt);
+  termReplay.hidden = false;
+}
+if (term) {
+  if (still) {
+    for (const [kind, text, extra] of SESSION) term.append(termLine(kind, text, extra));
+  } else {
+    new IntersectionObserver(([e], obs) => {
+      if (e.isIntersecting) { obs.disconnect(); playTerm(); }
+    }, { threshold: 0.35 }).observe(term);
+    termReplay.addEventListener('click', playTerm);
+  }
+}

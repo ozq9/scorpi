@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scorpi, a local-first AI agent for Windows</title>
-<meta name="description" content="Scorpi is a free, local-first AI agent for Windows: chat, live canvas, coding agents, voice and MCP. Bring any model, from Ollama to your own keys.">
+<meta name="description" content="Scorpi is a free, local-first AI agent for Windows: chat, live canvas, a coding agent with plan mode, reviews and a terminal, voice and MCP. Runs on free models, from Ollama to 25+ free cloud tiers.">
 <meta name="theme-color" content="#000000">
 <meta property="og:title" content="Scorpi, a local-first AI agent for Windows">
 <meta property="og:description" content="Chat, live canvas, coding agents and voice in one app. Bring any model.">
@@ -29,6 +29,8 @@
   <a class="mark" href="#top" aria-label="Scorpi, back to the top">scorpi<span class="cursor" aria-hidden="true"></span><span class="tag">beta</span></a>
   <nav aria-label="Sections">
     <a href="#features">Features</a>
+    <a href="#code">Coding</a>
+    <a href="#models">Free models</a>
     <a href="#inside">Screens</a>
     <a href="/gallery">Gallery</a>
     <a href="#install">Install</a>
@@ -42,7 +44,7 @@
 
   <section class="hero pad">
     <h1>A local-first AI agent for Windows</h1>
-    <p class="sub">Chat, live canvas, coding agents and voice in one app. Run models offline with Ollama, use a free cloud tier, or bring your own keys.</p>
+    <p class="sub">Chat, live canvas, a coding agent and voice in one app. Run models offline with Ollama, on more than 25 free cloud tiers, or with your own keys. Free, all of it.</p>
 
     <div class="get" data-tabs>
       <div class="tabs" role="tablist" aria-label="Ways to install">
@@ -88,9 +90,9 @@
     <ul class="list">
       <li><b>Live canvas</b><span>Answers come with charts, maps, tables and cards next to the chat.</span></li>
       <li><b>Agents</b><span>Coder, Researcher, Writer, Analyst and Operator take bigger jobs in the background. Create your own from chat, with schedules.</span></li>
-      <li><b>Coding</b><span>The Coder builds, runs and fixes projects in its own folder out of the box. Install the open-source OpenCode CLI and it switches to that engine automatically: precise edits, patches, code search, LSP.</span></li>
+      <li><b>Coding</b><span>The Coder plans, builds, tests and fixes projects, checks every edit, and asks a second model for a review. In the app or in a terminal. <a href="#code">More below</a>.</span></li>
       <li><b>GitHub</b><span>Clone your repos or open any folder. A side panel shows every helper agent, a live preview with its console, the diff of each run (undo in one click), a terminal, commits, pull requests and issues the Coder fixes.</span></li>
-      <li><b>Any model</b><span>Ollama, Groq, Gemini, OpenRouter, GitHub Models and more. Falls back to the next model when a free tier runs out.</span></li>
+      <li><b>Any model</b><span>Ollama, Groq, Gemini, OpenRouter, Ollama Cloud, Cloudflare and 20 more free tiers. Falls back to the next model when a free tier runs out.</span></li>
       <li><b>Voice</b><span>Push to talk with local speech recognition. Interrupt it mid-sentence.</span></li>
       <li><b>Desktop</b><span>Hold Ctrl + Win over any window and ask about it. Scorpi sees what you mean.</span></li>
       <li><b>MCP and plugins</b><span>Connect MCP servers over stdio or HTTP. Plugins add panes, commands and hooks.</span></li>
@@ -98,27 +100,77 @@
     </ul>
   </section>
 
+  <section class="pad" id="code">
+    <h2>The coding agent</h2>
+    <p class="lead">Tell the Coder what to build or fix. It maps the code, shows you a plan, edits with a check after every change, runs the tests until they pass, and keeps a checkpoint of every run so you can undo it. On any model, free ones included.</p>
+
+    <figure class="term" aria-label="A session of scorpi-code: it maps the code, proposes a plan, gets approval, edits two files with checks, runs the tests and reports.">
+      <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>~/projects/recipe-box</span></div>
+      <pre class="term-body" data-term aria-hidden="true"></pre>
+      <noscript><pre class="term-body">$ scorpi-code --plan "add a dark mode toggle"</pre></noscript>
+    </figure>
+    <div class="demo-foot term-foot">
+      <p class="fine">Fig 2. The same agent in a terminal: <span class="hi">scorpi-code</span> in any folder, with the app's models, keys and checkpoints.</p>
+      <button class="replay" type="button" data-term-replay hidden>replay</button>
+    </div>
+
+    <ul class="list wide">
+      <li><b>Plan first</b><span>It reads the code and proposes a plan. Approve it, or say what to change and it revises. Nothing is touched before you agree.</span></li>
+      <li><b>Real code tools</b><span>Regex search, a map of every class and function, multi-edits and patches that apply all or nothing, test runners for a dozen stacks, dev servers in the background.</span></li>
+      <li><b>Checks every change</b><span>Each edit is syntax-checked and shown as a diff. Broken code, bad JSON or a page that links to a missing file goes straight back to the agent.</span></li>
+      <li><b>You set the leash</b><span>Ask first, Auto or Full auto. Read-only commands never ask, builds and tests go ahead in Auto, and commands that could wipe a disk never run at all.</span></li>
+      <li><b>Second opinion</b><span>Another model reviews the changes or helps with a bug it is stuck on. <span class="hi">/review</span> <span class="hi">/test</span> <span class="hi">/fix</span> <span class="hi">/init</span> <span class="hi">/undo</span> in every project.</span></li>
+      <li><b>Long jobs, small models</b><span>Every request is kept inside the model's limits: old output is trimmed, earlier steps are summarized, and a too-large request is shortened instead of failing.</span></li>
+      <li><b>Your rules</b><span>Reads AGENTS.md, CLAUDE.md, GEMINI.md, .cursorrules, .clinerules and friends. Hooks run your formatter after edits and your tests before it finishes.</span></li>
+      <li><b>In a terminal</b><span><span class="hi">scorpi-code</span> works in any folder; <span class="hi">-p</span> runs one task for scripts and CI. The folder shows up in the app with every change.</span></li>
+    </ul>
+  </section>
+
+  <section class="pad" id="models">
+    <h2>Free models, lots of them</h2>
+    <p class="lead">Paste a free key and its models show up everywhere. When one runs out of quota or goes down, Scorpi moves on to the next and says so. <span class="hi">Automatic</span> picks the strongest coding model you have.</p>
+    <div class="prov-groups">
+      <div class="prov-group"><h3>no signup</h3><div class="providers"><span>Pollinations</span><span>OVHcloud AI</span><span>LLM7</span></div></div>
+      <div class="prov-group"><h3>on your PC</h3><div class="providers"><span>Ollama</span><span>LM Studio</span><span>llama.cpp</span></div></div>
+      <div class="prov-group wide"><h3>free key</h3><div class="providers">
+        <span>Groq</span><span>Google Gemini</span><span>OpenRouter</span><span>Ollama Cloud</span><span>Cloudflare Workers AI</span><span>Vercel AI Gateway</span><span>Mistral</span>
+        <span>Cerebras</span><span>NVIDIA</span><span>Hugging Face</span><span>Z.ai</span><span>Cohere</span><span>SambaNova</span><span>SiliconFlow</span>
+      </div></div>
+      <div class="prov-group wide"><h3>free credit at signup</h3><div class="providers">
+        <span>Nebius</span><span>Together</span><span>Fireworks</span><span>DeepInfra</span><span>Novita</span><span>Hyperbolic</span><span>Scaleway</span>
+      </div></div>
+      <div class="prov-group wide"><h3>plans and your own keys</h3><div class="providers">
+        <span>OpenCode Go</span><span>OpenCode Zen</span><span>Z.ai Coding</span><span>Kimi Code</span><span>MiniMax</span><span>DeepSeek</span><span>Moonshot</span><span>Alibaba Qwen</span><span>OpenAI</span><span>Anthropic</span>
+      </div></div>
+    </div>
+  </section>
+
   <section class="inside" id="inside">
     <div class="pad inside-head">
       <h2>Screens</h2>
       <div class="tabs" role="tablist" aria-label="Screens of the app" data-tabs-for="shots">
-        <button role="tab" id="s-agents" aria-controls="v-agents" aria-selected="true">agents</button>
+        <button role="tab" id="s-code" aria-controls="v-code" aria-selected="true">code</button>
+        <button role="tab" id="s-agents" aria-controls="v-agents" aria-selected="false" tabindex="-1">agents</button>
         <button role="tab" id="s-studio" aria-controls="v-studio" aria-selected="false" tabindex="-1">studio</button>
         <button role="tab" id="s-voice" aria-controls="v-voice" aria-selected="false" tabindex="-1">voice</button>
       </div>
     </div>
     <div class="views">
-      <figure class="view" id="v-agents" role="tabpanel" aria-labelledby="s-agents">
+      <figure class="view" id="v-code" role="tabpanel" aria-labelledby="s-code">
+        <div class="screen"><img src="/img/shots/code.webp" alt="A coding project: the Coder's plan for a recipe box app with numbered steps, Approve and build, Request changes and Reject, next to the project panel saying Plan ready" width="2000" height="1250" loading="lazy"></div>
+        <figcaption class="pad fine">Fig 3. Code. Plan first: the Coder looked at the folder and proposes a plan. Approve it, or write what should change.</figcaption>
+      </figure>
+      <figure class="view" id="v-agents" role="tabpanel" aria-labelledby="s-agents" hidden>
         <div class="screen"><img src="/img/shots/agents.webp" alt="The Agents page: example requests and the built-in team of Coder, Researcher, Writer, Analyst and Operator" width="1600" height="1000" loading="lazy"></div>
-        <figcaption class="pad fine">Fig 2. Agents. Hand off a job in chat and follow its progress, or ask for a new agent: <span class="hi">remind me every day at 13:00 to take a break</span>.</figcaption>
+        <figcaption class="pad fine">Fig 4. Agents. Hand off a job in chat and follow its progress, or ask for a new agent: <span class="hi">remind me every day at 13:00 to take a break</span>.</figcaption>
       </figure>
       <figure class="view" id="v-studio" role="tabpanel" aria-labelledby="s-studio" hidden>
         <div class="screen"><img src="/img/shots/studio.webp" alt="The Studio: a box to describe a look, and a grid of styles: Mono (the default), Midnight, Paper and Terminal" width="1600" height="1000" loading="lazy"></div>
-        <figcaption class="pad fine">Fig 3. Studio. Every colour, font and radius is a token. Edit them live, or describe a look and Scorpi writes the style.</figcaption>
+        <figcaption class="pad fine">Fig 5. Studio. Every colour, font and radius is a token. Edit them live, or describe a look and Scorpi writes the style.</figcaption>
       </figure>
       <figure class="view" id="v-voice" role="tabpanel" aria-labelledby="s-voice" hidden>
         <div class="screen zoom"><img src="/img/shots/voice.webp" alt="Voice mode: Hold Space, speak, then let go" width="1600" height="1000" loading="lazy"></div>
-        <figcaption class="pad fine">Fig 4. Voice. Hold Space, speak, let go. Speech recognition runs locally with faster-whisper.</figcaption>
+        <figcaption class="pad fine">Fig 6. Voice. Hold Space, speak, let go. Speech recognition runs locally with faster-whisper.</figcaption>
       </figure>
     </div>
   </section>
@@ -129,13 +181,10 @@
       <li><b>Python backend</b><span>Runs on the standard library alone. Optional packages unlock documents, charts, voice and computer use, installed one by one so one failure never blocks the rest.</span></li>
       <li><b>localhost:8000</b><span>The UI is a web app served by your PC, in its own window or any browser.</span></li>
       <li><b>Providers</b><span>Any OpenAI-compatible <span class="hi">/chat/completions</span> or Anthropic-style <span class="hi">/messages</span> endpoint, plus coding plans.</span></li>
-      <li><b>Permissions</b><span>Reading is allowed by default. Running code, controlling the PC, deleting and sending ask first. Set each tool to Allow, Ask or Off.</span></li>
+      <li><b>Permissions</b><span>Reading is allowed by default. Running code, controlling the PC, deleting and sending ask first, unless the command is known to be harmless. Set each tool to Allow, Ask or Off.</span></li>
       <li><b>Your data</b><span>Chats, settings and keys live in Scorpi's data folder next to the app. Nothing is sent anywhere except the provider you pick.</span></li>
+      <li><b>Tests</b><span>Unit and end-to-end tests run against a mock model server: <span class="hi">python -m unittest discover -s tests -t .</span></span></li>
     </ul>
-    <div class="providers" aria-label="Model providers">
-      <span>Ollama</span><span>Groq</span><span>Google Gemini</span><span>OpenRouter</span><span>GitHub Models</span><span>Mistral</span>
-      <span>Cerebras</span><span>NVIDIA</span><span>Hugging Face</span><span>Cohere</span><span>SambaNova</span><span>OpenAI</span>
-    </div>
   </section>
 
   <section class="pad" id="install">
@@ -204,7 +253,13 @@
       <details><summary>Do I need OpenCode for coding?</summary>
         <p>No. The Coder and the Code section work with Scorpi's own tools. For the full engine, install Node.js and run <span class="hi">npm i -g @opencode/cli</span>; Scorpi picks it up on its own. You can switch between Full and Basic under Connect.</p></details>
       <details><summary>Can it break things?</summary>
-        <p>Anything that runs code, controls the PC, deletes or sends asks you first. You can set every tool to Allow, Ask or Off.</p></details>
+        <p>Anything that runs code, controls the PC, deletes or sends asks you first, unless you allow more. In a coding project, every run is saved as a checkpoint you can undo, commands that could wipe a disk or your home folder are refused outright, and Plan first lets you approve the plan before anything changes.</p></details>
+      <details><summary>What may the agent do without asking?</summary>
+        <p>You choose under Connect, Tools &amp; permissions, or with Shift+Tab in a project. Ask first: only reading. Auto (the default): reading, builds, tests, running the project and file changes inside the project folder. Full auto: everything except destructive commands such as deleting folders or force pushes.</p></details>
+      <details><summary>Is there a terminal version?</summary>
+        <p>Yes: <span class="hi">scorpi-code</span>, in the app's folder. Run it in any project for an interactive session, or <span class="hi">scorpi-code -p "task"</span> for scripts and CI. It uses the app's models, keys and settings, and the folder shows up in the app.</p></details>
+      <details><summary>Which free model is best for coding?</summary>
+        <p>Set the coding model to Automatic and Scorpi picks the strongest coder among the services you added (Qwen3 Coder, Kimi K2, Devstral, gpt-oss and the like, marked best code). Add two or three free keys, so another one takes over when a free tier runs out.</p></details>
       <details><summary>How do I uninstall it?</summary>
         <p>Settings, Apps, Scorpi, Uninstall, or <span class="hi">Scorpi-Setup.exe --uninstall --quiet</span>. You choose whether chats and settings stay.</p></details>
       <details><summary>How do I verify the download?</summary>

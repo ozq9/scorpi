@@ -169,6 +169,34 @@ main > section.pad { padding-top: clamp(48px, 6vw, 72px); padding-bottom: clamp(
 .providers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 36px; border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); }
 .providers span { padding: 12px 14px; font-size: 13px; color: var(--dim); border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
 
+/* ---------- the coding agent: a terminal session that types itself out ---------- */
+.term { margin: 0; border: 1px solid var(--rule); border-radius: 6px; background: var(--cell); overflow: hidden; }
+.term-bar { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-bottom: 1px solid var(--rule); font-size: 12px; color: var(--faint); }
+.term-bar i { width: 9px; height: 9px; border-radius: 50%; background: #232323; }
+.term-bar span { margin-left: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.term-body {
+  margin: 0; padding: 16px 18px; min-height: calc(24 * 1.6em + 32px); font: 13px/1.6 var(--mono); color: var(--fg);
+  white-space: pre; overflow-x: auto; scrollbar-width: thin;
+}
+.term-body .t-dim { color: var(--dim); }
+.term-body .t-faint { color: var(--faint); }
+.term-body .t-b { font-weight: 700; }
+/* colour only where it means something: added, removed, passed */
+.term-body .t-add, .term-body .t-ok { color: #7cefb8; }
+.term-body .t-del { color: #ff8f8f; }
+.term-body .t-cur { display: inline-block; width: .6em; height: 1.15em; margin-left: 1px; vertical-align: -.2em; background: var(--fg); animation: blink 1s steps(1) infinite; }
+.term-foot { padding-left: 0; padding-right: 0; margin-bottom: 28px; }
+.list.wide li { grid-template-columns: auto 24ch minmax(0, 1fr); }
+.list span a { text-underline-offset: 3px; }
+
+/* ---------- free models, grouped by what it takes to use them ---------- */
+.prov-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 24px; }
+.prov-group.wide { grid-column: 1 / -1; }
+.prov-group h3 { margin: 0 0 10px; font-size: 12px; font-weight: 500; letter-spacing: 0; color: var(--faint); }
+.prov-group h3::before { content: "# "; }
+.prov-groups .providers { margin-top: 0; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.prov-group:not(.wide) .providers { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
 /* ---------- install ---------- */
 .setup { list-style: none; margin: 0 0 40px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; max-width: 720px; counter-reset: step; }
 .setup li { counter-increment: step; }
@@ -210,7 +238,10 @@ details p { padding: 0 0 18px calc(1ch + 14px); color: var(--dim); max-width: 72
   .bar { justify-content: space-between; }
   .list li { grid-template-columns: auto minmax(0, 1fr); }
   .list span { grid-column: 2; }
-  .providers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .providers, .prov-groups .providers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .prov-groups { grid-template-columns: minmax(0, 1fr); }
+  .term-body { font-size: 11px; padding: 12px; }
+  .list.wide li { grid-template-columns: auto minmax(0, 1fr); }
   /* full screenshots are unreadable this narrow: zoom in on the part that matters */
   .d-start { transform: scale(1.55); transform-origin: 50% 47%; }
   .d-answer { transform: scale(1.7); transform-origin: 100% 38%; }
