@@ -303,7 +303,7 @@ What the Coder does on Scorpi's own engine (*Basic*, no OpenCode needed), on any
   *Changes*); *Discard* deletes the copies.
 - **@ files**: type `@` in a project's prompt box to pick files; the agent gets their contents with your message.
 - **Project commands** in a project's `/` menu: `/init` writes `AGENTS.md`, `/review`, `/test` (run, fix, repeat until
-  green), `/fix` (checks, tests and build), `/explain`, `/security`, `/plan` and `/undo` (the last run's files back).
+  green), `/fix` (checks, tests and build), `/explain`, `/security`, `/plan`, `/try` and `/undo` (the last run's files back).
 - **A second opinion**: `ask_expert` asks another model (by default the strongest coder of a different provider; set it
   as `expert_model`) about a stubborn bug, a design or a plan; `review_changes` and *Changes → Review* have it review the
   uncommitted changes, a branch or the last run, and *Fix these* hands the findings to the coder.
