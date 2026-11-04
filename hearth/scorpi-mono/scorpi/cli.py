@@ -13,6 +13,7 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 
 from . import events
 
@@ -272,13 +273,14 @@ class Session:
                       max_steps=80, plan_mode=self.plan_next, autonomy=self.autonomy,
                       workdir=self.folder, project=self.project)
         self.plan_next = False
-        result = {"text": "", "error": ""}
+        result = {"text": "", "error": "", "resume_at": 0}
 
         def work():
             try:
                 result["text"] = agent.run_turn(history_for_model(conv), content)
             except Exception as exc:  # noqa: BLE001 - shown to the user, the session goes on
                 result["error"] = str(exc)
+                result["resume_at"] = getattr(exc, "resume_at", 0) or 0
             finally:
                 run.finish()
 
@@ -295,7 +297,22 @@ class Session:
         if agent.approved_plan and not run.cancelled:
             return self.turn("Build the plan the user approved, step by step, and keep update_plan current:\n\n" + agent.approved_plan,
                              display="(building the approved plan)")
+        if result["resume_at"] and not run.cancelled and SETTINGS.get("auto_resume", True) and self._sleep_until(result["resume_at"]):
+            from . import limits
+            return self.turn(limits.CONTINUE, display="(continuing after the usage limits reset)")
         return answer, not result["error"] and not run.cancelled
+
+    def _sleep_until(self, at):
+        """Every model is at its usage limit: wait for the first reset (Ctrl+C gives up). True when the time came."""
+        from . import limits
+        self.ui.line(self.ui.c.yellow("Paused until %s, when the first limit resets. Ctrl+C to stop waiting." % limits.clock(at)))
+        try:
+            while time.time() < at:
+                time.sleep(min(5, max(0.1, at - time.time())))
+        except KeyboardInterrupt:
+            self.ui.line(self.ui.c.dim("Not waiting."))
+            return False
+        return True
 
     def _wait(self, worker, run):
         while worker.is_alive():

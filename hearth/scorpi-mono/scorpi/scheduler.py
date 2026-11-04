@@ -95,8 +95,9 @@ def _tick():
             run_automation(a)
         except Exception:
             traceback.print_exc()
-    from . import agents
+    from . import agents, limits
     agents.tick(now)
+    limits.tick(now)  # work that paused because every model was at its usage limit
 
 
 def _loop():

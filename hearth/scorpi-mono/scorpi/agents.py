@@ -10,7 +10,7 @@ import time
 import traceback
 import unicodedata
 
-from . import db, events, gitops, llm, notify, opencode, scheduler
+from . import db, events, gitops, limits, llm, notify, opencode, scheduler
 from .config import DATA_DIR, SETTINGS, WORKSPACE
 
 PROJECTS = os.path.join(WORKSPACE, "projects")
@@ -253,6 +253,7 @@ class Job:
         self.run_note = ""  # what the chat shows for a run the job started by itself
         self.attempt_of = ""  # the project this job is one of several parallel attempts for (scorpi/attempts.py)
         self.approved_plan = ""  # set when the user approves: the job then builds it in a new run
+        self.resume_at = 0  # every model was at its limit: the job waits ("waiting") and continues at this time
         self._published = 0.0
 
     def kwargs(self):
@@ -293,6 +294,9 @@ class Job:
         self.subs = {}  # helpers belong to one run
         self.planning = bool(plan)
         self.approved_plan = ""
+        self.resume_at = 0
+        if self.id:
+            limits.cancel_resume("job", self.id)
         if self.workdir and self.project and SETTINGS.get("checkpoints", True):
             # the files as they are before the agent touches them: Changes shows the run's diff, and it can be undone
             self.checkpoint = gitops.snapshot(self.project, self.workdir, "Before: %s — %s" % (self.title, _first_line(prompt)[:120]))
@@ -392,6 +396,7 @@ class Job:
             self.activity = "Got your answer" if ev.get("answer") else self.activity
         elif kind == "error":
             self.error = ev.get("error") or "failed"
+            self.resume_at = ev.get("resume_at") or 0
         elif kind == "done":
             msg = db.one("SELECT data FROM messages WHERE id=?", (ev.get("message_id"),))
             if msg:
@@ -415,6 +420,8 @@ class Job:
             # the user wrote after the agent's last step: carry on with it
             notes, run.inbox[:] = list(run.inbox), []
             return self.start("\n\n".join(notes))
+        if self.error and self.resume_at and not run.cancelled:
+            return self._pause()
         self.result = (run.result or "").strip()
         self.status = "stopped" if run.cancelled else "failed" if self.error else "done"
         self.activity = {"done": "Finished", "failed": "Failed: " + self.error[:160], "stopped": "Stopped"}[self.status]
@@ -437,6 +444,30 @@ class Job:
                     link="/c/" + (self.parent_conv or self.conv_id))
         if self.parent_conv and self.status != "stopped":
             threading.Thread(target=self._report, daemon=True).start()
+
+    def _pause(self):
+        """Every model is at its usage limit: wait, and continue by itself when the first one resets."""
+        self.status = "waiting"
+        self.activity = "Paused: every model is at its usage limit. Continues at %s" % limits.clock(self.resume_at)
+        self.approval = self.question = None
+        self.says = ""
+        self.updated = time.time()
+        limits.resume_later("job", self.id, self.resume_at)
+        db.x("UPDATE tasks SET status='waiting', updated=? WHERE id=?", (self.updated, self.id))
+        db.x("UPDATE agents SET last_status='waiting' WHERE id=?", (self.agent["id"],))
+        self.publish(force=True)
+        events.publish("task", {"id": self.id, "status": self.status})
+        notify.send("%s · paused until %s" % (self.title, limits.clock(self.resume_at)),
+                    "Every model is at its usage limit. %s continues by itself then." % self.agent["name"], level="info",
+                    link="/c/" + (self.parent_conv or self.conv_id))
+
+    def resume(self):
+        """Continue a job that paused for usage limits (now, or when its time comes)."""
+        if self.status != "waiting":
+            return False
+        self.error = ""
+        self.start(limits.CONTINUE, system="Continuing after the usage limits reset")
+        return True
 
     def _checkpoint_after(self):
         sha = gitops.snapshot(self.project, self.workdir, "After: %s (%s)" % (self.title, self.status))
@@ -485,6 +516,13 @@ class Job:
         return "restarted"
 
     def stop(self):
+        if self.status == "waiting":
+            limits.cancel_resume("job", self.id)
+            self.status, self.activity, self.resume_at = "stopped", "Stopped", 0
+            db.x("UPDATE tasks SET status='stopped', updated=? WHERE id=?", (time.time(), self.id))
+            self.publish(force=True)
+            events.publish("task", {"id": self.id, "status": self.status})
+            return True
         if self.run and not self.run.done:
             self.run.cancel()
             return True
@@ -502,7 +540,7 @@ class Job:
                 "updated": self.updated, "conv_id": self.conv_id, "parent_conv": self.parent_conv, "origin": self.origin,
                 "workdir": self.workdir, "project": self.project, "checkpoint": self.checkpoint, "live": True,
                 "planning": self.planning and self.status == "running", "run_id": self.run.id if self.run else "",
-                "run_note": self.run_note, "attempt_of": self.attempt_of}
+                "run_note": self.run_note, "attempt_of": self.attempt_of, "resume_at": self.resume_at if self.status == "waiting" else 0}
 
     def publish(self, force=False):
         now = time.time()
@@ -604,7 +642,9 @@ def job(job_id):
     restored.result = row["result"] or ""
     restored.started, restored.updated = row["created"], row["updated"]
     restored.oc_session = row.get("oc_session") or ""
-    restored.activity = {"done": "Finished", "failed": "Failed", "stopped": "Stopped"}.get(restored.status, "Interrupted (Scorpi restarted)")
+    restored.activity = _row_activity(restored.status, job_id)
+    if restored.status == "waiting":
+        restored.resume_at = (limits.pending("job", job_id) or {}).get("at", 0)
     if row["origin"] == "attempt":
         from .attempts import attempt_of_job
         restored.attempt_of, restored.workdir = attempt_of_job(job_id)  # its own copy of the project, not a project folder
@@ -612,6 +652,13 @@ def job(job_id):
         restored.project = row.get("project") or slug(row["title"], "project")
         restored.workdir = project_path(restored.project)
     return restored
+
+
+def _row_activity(status, job_id=""):
+    if status == "waiting":
+        pending = limits.pending("job", job_id)
+        return ("Paused: every model is at its usage limit. Continues at %s" % limits.clock(pending["at"])) if pending else "Paused"
+    return {"done": "Finished", "failed": "Failed", "stopped": "Stopped"}.get(status, "Interrupted (Scorpi restarted)")
 
 
 def job_for_conversation(conv_id):
@@ -661,6 +708,10 @@ def jobs(limit=60, agent_id=None):
             continue
         agent = get(row["agent_id"]) or {"id": row["agent_id"], "name": row["agent_id"], "icon": "agent"}
         status = row["status"] if row["status"] != "running" else "interrupted"
+        waiting = job(row["id"]) if status == "waiting" else None
+        if waiting:
+            out.append(waiting.public())  # it continues by itself: keep it live
+            continue
         out.append({"id": row["id"], "agent_id": agent["id"], "agent_name": agent["name"], "agent_icon": agent.get("icon") or "agent",
                     "title": row["title"], "goal": (row.get("goal") or "")[:600], "status": status,
                     "activity": {"done": "Finished", "failed": "Failed", "stopped": "Stopped"}.get(status, "Interrupted (Scorpi restarted)"),

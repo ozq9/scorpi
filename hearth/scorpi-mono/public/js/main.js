@@ -360,6 +360,9 @@ function onServerEvent(ev) {
     case 'agent_update':
       chat.followAgentUpdate(d);
       break;
+    case 'resumed':
+      chat.followResumed(d);
+      break;
     case 'agent_job':
       bus.emit('server:agent_job', d);
       if (d.project) projectsChanged();

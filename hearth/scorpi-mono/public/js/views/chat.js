@@ -506,6 +506,15 @@ export function followAgentUpdate(d) {
   attachRun(d.run_id, d.conv_id);
 }
 
+// A chat that paused at the usage limits continues by itself: show it live when it is open.
+export function followResumed(d) {
+  if (!d || d.conv_id !== state.activeId || live || state.view !== 'chat') return;
+  els.messages.querySelectorAll('.msg.last').forEach((n) => n.classList.remove('last'));
+  els.messages.querySelectorAll('.resume-row').forEach((n) => n.remove());
+  els.messages.appendChild(systemNode(d.text || 'Continuing after the usage limits reset'));
+  attachRun(d.run_id, d.conv_id);
+}
+
 function userNode(m) {
   const atts = (m.data && m.data.attachments) || [];
   // every attachment opens in the viewer; pictures page through each other there
@@ -556,12 +565,37 @@ function editFrom(m) {
   toast('Editing message', { body: 'Sending will replace it and everything after.', timeout: 3000 });
 }
 
+// Every model was at its usage limit: the chat continues by itself when the first one resets (scorpi/limits.py).
+function resumeRow(at) {
+  const when = new Date(at * 1000);
+  const clock = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const row = h('div.resume-row');
+  const act = async (now) => {
+    const id = state.activeId;
+    if (!id) return;
+    try {
+      const res = await api.post('/api/limits/resume', { conversation_id: id, now });
+      row.replaceChildren(h('span.muted', now ? 'Trying again now…' : 'It will not continue by itself.'));
+      if (res.run_id) attachRun(res.run_id, id);
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+  row.append(
+    icon('clock'),
+    h('span', 'Continues by itself at ' + clock + '.'),
+    h('button.btn.small.quiet', { onclick: () => act(true) }, icon('play'), 'Try now'),
+    h('button.btn.small.quiet', { onclick: () => act(false) }, 'Don’t continue'),
+  );
+  return row;
+}
+
 function assistantNode(m, isLast) {
   const data = m.data || {};
   const view = new TurnView({ stored: true, message: m });
   for (const part of data.parts || []) view.addStoredPart(part);
   if (!(data.parts || []).some((p) => p.type === 'text') && m.content) view.setText(m.content, true);
-  if (data.error) view.error(data.error);
+  if (data.error) view.error(data.error, isLast && data.resume_at > Date.now() / 1000 ? data.resume_at : 0);
   if (data.stopped && !m.content) view.note('Stopped.');
   view.finish(m.content || '', { isLast });
   return view.el;
@@ -808,10 +842,10 @@ class TurnView {
     if (nearBottom()) scrollToEnd();
   }
 
-  error(text) {
+  error(text, resumeAt = 0) {
     sfx('error');
     this.clearWaiting();
-    this.body.appendChild(h('div.error-note', text));
+    this.body.appendChild(h('div.error-note', text, resumeAt ? resumeRow(resumeAt) : null));
     if (!this.stored) {
       this.failed = true;
       mood('sad', 3800);
@@ -1174,7 +1208,7 @@ function applyEvent(view, ev) {
       view.note(ev.text);
       break;
     case 'error':
-      view.error(ev.error);
+      view.error(ev.error, ev.resume_at || 0);
       break;
     default:
       break;

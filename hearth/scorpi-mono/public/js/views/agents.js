@@ -13,7 +13,7 @@ const GROUPS = [
   ['files', 'Files'], ['docs', 'Documents'], ['code', 'Code'], ['web', 'Web'], ['data', 'Data'], ['media', 'Media'],
   ['computer', 'Computer use'], ['system', 'System'], ['maps', 'Maps'], ['agenda', 'Agenda'], ['records', 'Records'], ['knowledge', 'Knowledge'],
 ];
-const STATUS_BADGE = { running: '.warn', done: '.ok', failed: '.err', stopped: '', interrupted: '' };
+const STATUS_BADGE = { running: '.warn', waiting: '.warn', done: '.ok', failed: '.err', stopped: '', interrupted: '' };
 const EXAMPLES = [
   'Build me a landing page for my bakery, with opening hours and a contact form',
   'Create an agent that reminds me every day at 13:00 to take a break',
@@ -72,7 +72,7 @@ export function jobCard(job, { compact = false } = {}) {
       h('span.job-avatar', icon(job.agent_icon || 'agent')),
       h('div.job-names', h('div.job-title', job.title || 'Job'), h('div.job-agent', job.agent_name || 'Agent', job.started ? ' · ' + (running ? 'for ' + duration(job.started) : fmtRelative(job.updated || job.started)) : '')),
       job.model ? h('button.badge.job-model', { title: 'Model: ' + job.model + ' (click to change)', onclick: () => modelSheet(job) }, shortModel(job.model)) : null,
-      h('span.badge' + (STATUS_BADGE[job.status] ?? ''), job.status === 'running' ? (job.approval || job.question ? 'needs you' : 'working') : job.status || 'queued'),
+      h('span.badge' + (STATUS_BADGE[job.status] ?? ''), job.status === 'running' ? (job.approval || job.question ? 'needs you' : 'working') : job.status === 'waiting' ? 'paused' : job.status || 'queued'),
     ),
     h('div.job-now', running ? h('span.job-pulse') : icon(job.status === 'done' ? 'check' : job.status === 'failed' ? 'x' : 'clock'), h('span', job.activity || '')),
     running && job.says ? h('div.job-says', '…' + job.says.replace(/\s+/g, ' ').slice(-180)) : null,
@@ -103,12 +103,13 @@ export function jobCard(job, { compact = false } = {}) {
       : null,
     job.question ? questionBlock(job) : null,
     !running && job.result && !compact ? h('div.job-result', job.result.split('\n').filter((l) => l.trim()).slice(0, 6).join('\n')) : null,
-    !running && job.error ? h('div.job-result.err', job.error) : null,
+    !running && job.error && job.status !== 'waiting' ? h('div.job-result.err', job.error) : null,
     h(
       'div.job-foot',
       job.conv_id ? h('a.btn.small', { href: '/c/' + job.conv_id, 'data-link': '' }, icon('eye'), 'Watch work') : null,
       h('button.btn.small.quiet', { onclick: () => messageSheet(job) }, icon('chat'), running ? 'Message' : 'Continue'),
-      running ? h('button.btn.small.danger', { onclick: () => stopJob(job) }, icon('stop'), 'Stop') : null,
+      job.status === 'waiting' ? h('button.btn.small.accent', { title: 'Try again now instead of waiting for the limits to reset', onclick: () => resumeJob(job) }, icon('play'), 'Continue now') : null,
+      running || job.status === 'waiting' ? h('button.btn.small.danger', { onclick: () => stopJob(job) }, icon('stop'), 'Stop') : null,
       job.workdir && !compact ? h('button.btn.small.quiet', { title: job.workdir, onclick: () => api.post('/api/file/open', { path: job.workdir }).then(() => toast('Opened the project folder on the PC')).catch((e) => toast(e.message, 'error')) }, icon('folder'), 'Folder') : null,
     ),
   );
@@ -176,6 +177,10 @@ async function decide(id, decision, note = '') {
   } catch (e) {
     toast(e.message, 'error');
   }
+}
+
+async function resumeJob(job) {
+  await api.post(`/api/agent-jobs/${job.id}/resume`).then(() => toast(job.agent_name + ' carries on')).catch((e) => toast(e.message, 'error'));
 }
 
 async function stopJob(job) {

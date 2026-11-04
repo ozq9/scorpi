@@ -11,7 +11,7 @@ import threading
 import time
 import traceback
 
-from . import db, events, hooks, llm, safety, usage
+from . import db, events, hooks, limits, llm, safety, usage
 from .compact import Compactor
 from .config import SETTINGS, UPLOADS, WORKSPACE
 from .tools import TOOLS, Result, ToolError, base_dir, policy, schema_for, select_tools
@@ -740,6 +740,7 @@ def start_turn(conv_id, user_text, attachments=None, skill="", model="", groups=
     agent_kwargs configure a dedicated agent; note marks a message Scorpi wrote itself (shown as a small note, not a bubble).
     display: what the chat shows instead of user_text (a plugin's slash command: "/game", while its full prompt goes to the model)."""
     conv = db.get_conversation(conv_id)
+    limits.cancel_resume("chat", conv_id)  # the user carries on themselves: no automatic "continue" later
     run = events.register_run(events.Run(conv_id, title=title_hint or (conv or {}).get("title", ""), origin=origin))
     base_data = {"attachments": attachments or [], "skill": skill}
     if note:
@@ -769,6 +770,7 @@ def start_turn(conv_id, user_text, attachments=None, skill="", model="", groups=
                   "model": agent.model, "skill": skill})
         error = ""
         text = ""
+        resume_at = 0
         try:
             if not agent.model:
                 raise llm.LLMError("No model available. Add a free cloud key in Connections → Model (Groq, Gemini, OpenRouter…), or install Ollama and pull a model such as qwen3:8b.")
@@ -781,9 +783,13 @@ def start_turn(conv_id, user_text, attachments=None, skill="", model="", groups=
             text = agent.run_turn(history, user_text)
         except llm.LLMError as exc:
             error = str(exc)
+            resume_at = exc.resume_at if SETTINGS["auto_resume"] and not run.cancelled else 0
         except Exception as exc:
             traceback.print_exc()
             error = "%s: %s" % (type(exc).__name__, exc)
+        if resume_at and origin == "chat" and not agent_kwargs:
+            # every model is at its limit: this chat continues by itself when the first one resets
+            limits.resume_later("chat", conv_id, resume_at, model=model or "", skill=skill or "")
         if run.cancelled and not text:
             text = ""
         if not db.get_conversation(conv_id):
@@ -791,12 +797,14 @@ def start_turn(conv_id, user_text, attachments=None, skill="", model="", groups=
             run.finish()
             return
         data = {"parts": agent.parts, "model": agent.model, "skill": skill, "files": agent.files, "error": error, "stopped": run.cancelled}
+        if resume_at:
+            data["resume_at"] = resume_at
         db.x("INSERT INTO messages (id, conv_id, role, content, data, created) VALUES (?,?,?,?,?,?)",
              (assistant_mid, conv_id, "assistant", text, json.dumps(data), time.time()))
         db.touch_conversation(conv_id)
         run.result = text or error
         if error:
-            run.emit({"type": "error", "error": error})
+            run.emit({"type": "error", "error": error, "resume_at": resume_at})
         run.emit({"type": "done", "message_id": assistant_mid, "content": text, "stopped": run.cancelled})
         run.finish()
         events.publish("conversation", {"id": conv_id})

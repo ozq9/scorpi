@@ -245,7 +245,21 @@ function models(d) {
       !d.models.length && d.answers.length ? bars(d.answers.map((a) => ({ value: a.answers, label: a.label, tip: a.answers + ' answers' })), (n) => n + ' answers') : null),
     h('section.u-section', h('div.u-section-head', h('h2', 'Where the tokens go')),
       bars(SOURCES.map(([k, label]) => ({ value: d.sources[k] || 0, label })))),
+    limitsSection(d.limits),
   ];
+}
+
+// Free tiers' limits: what is resting until its reset, and requests left where providers report it (scorpi/limits.py).
+function limitsSection(lim) {
+  if (!lim || (!lim.resting.length && !lim.left.length)) return null;
+  const tryNow = (key) => api.post('/api/limits/clear', { key }).then(load).catch((e) => toast(e.message, 'error'));
+  return h('section.u-section', h('div.u-section-head', h('h2', 'Free limits'), h('span.muted', 'Scorpi works around models at their limit and continues when they reset')),
+    h('div.u-limits',
+      lim.resting.map((r) => h('div.u-limit.resting', icon('clock'), h('div.grow', h('div.u-model', r.label), h('div.faint', `${r.why} · back at ${r.at}`)),
+        h('button.btn.small.quiet', { type: 'button', onclick: () => tryNow(r.key) }, 'Try now'))),
+      lim.left.slice(0, 8).map((x) => h('div.u-limit', icon('bolt'), h('div.grow', h('div.u-model', x.label),
+        h('div.faint', x.limit ? `${x.remaining.toLocaleString()} of ${x.limit.toLocaleString()} requests left` : `${x.remaining.toLocaleString()} requests left`)),
+        x.limit ? h('div.u-share', h('i', { style: { width: Math.round((x.remaining / x.limit) * 100) + '%' } })) : null))));
 }
 
 // ---------- page ----------

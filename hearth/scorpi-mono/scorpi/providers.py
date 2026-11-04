@@ -13,6 +13,8 @@ Fields beyond the obvious ones:
   prefer_code     patterns for the provider's best coding model (the "Automatic (best coder)" coding model)
   account         label of an account id the URLs need ("{account}" in url / models_url), e.g. Cloudflare's
   category        "coding" (plans and paid keys), "free" (lasting free tier) or "credits" (free credits at signup)
+  resets          when daily limits reset: "utc" (default) or "pacific" (midnight US Pacific time, Google)
+  limit_scope     "provider" when a daily limit counts for the whole account rather than per model (OpenRouter's free requests)
 """
 
 # Coding plans and pay-as-you-go keys. Listed first: when you pay for a plan it is preferred over free tiers.
@@ -161,6 +163,7 @@ FREE = [
         "prefer_vision": [r"gemini-[\d.]+-flash$", r"gemini-flash-latest", r"flash"],
         "only": r"flash|gemma",
         "embed": "gemini-embedding-001",
+        "resets": "pacific",
     },
     {
         "id": "openrouter",
@@ -169,6 +172,7 @@ FREE = [
         "url": "https://openrouter.ai/api/v1",
         "signup": "https://openrouter.ai/keys",
         "free_only": True,
+        "limit_scope": "provider",
         "prefer": [r"^openrouter/free$", r"deepseek.*:free", r"qwen3.*:free", r"llama-4-maverick:free", r"gpt-oss.*:free", r":free"],
         "prefer_code": [r"qwen3-coder.*:free", r"kimi-k2.*:free", r"deepseek-(chat|v3|r1).*:free", r"gpt-oss-120b:free", r"glm.*:free", r"^openrouter/free$", r":free"],
         "prefer_vision": [r"^openrouter/free$", r"(vl|vision|gemma-3|llama-4|mistral-small).*:free", r":free"],

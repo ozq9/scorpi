@@ -143,6 +143,18 @@ async function model(body) {
     data.providers.forEach((p, i) => boxFor(p).appendChild(providerTile(p, i)));
   }
 
+  // A provider that hit its usage limit: Scorpi uses other models until it resets (scorpi/limits.py).
+  function restingNote(p) {
+    const r = p.resting;
+    const what = r.all ? 'Resting' : r.models === 1 ? 'One model rests' : r.models + ' models rest';
+    return h(
+      'div.limit-note',
+      icon('clock'),
+      h('span', `${what} until ${r.at}: ${r.why}. Scorpi uses your other models meanwhile.`),
+      h('button.btn.small.quiet', { type: 'button', onclick: async () => { await api.post('/api/limits/clear', { key: r.all ? '@' + p.id : '' }); refreshAll(true); } }, 'Try now'),
+    );
+  }
+
   function providerTile(p, i) {
     const keyName = 'key_' + p.id;
     const coding = p.category === 'coding';
@@ -179,6 +191,7 @@ async function model(body) {
       h('div.t-name', p.name),
       h('div.row', { style: { gap: '6px', flexWrap: 'wrap', margin: '2px 0 8px' } }, badge, p.stt ? h('span.badge', 'speech to text') : null),
       h('div.t-desc', p.about),
+      p.resting ? restingNote(p) : null,
       p.error ? h('div.hint', { style: { color: 'var(--danger)', fontSize: '12px', marginTop: '8px', wordBreak: 'break-word' } }, p.error) : null,
       picks.length
         ? h('div', { style: { marginTop: '12px', display: 'grid', gap: '8px' } }, picks.map((m) => h('div', { style: { fontSize: '12.5px', minWidth: 0 } }, h('div.mono', { style: { wordBreak: 'break-all' } }, m.id), h('div.row', { style: { gap: '4px', marginTop: '3px' } }, m.recommended.map((r) => h('span.badge' + (r === 'vision' ? '' : '.ok'), recommendedLabel[r] || r))))))

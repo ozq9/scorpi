@@ -22,7 +22,7 @@ import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import VERSION, agent, agents, attempts, coding, db, discord, events, gallery, github, gitops, knowledge, llm, looks, music, notify, opencode, scheduler, updates, usage, voice
+from . import VERSION, agent, agents, attempts, coding, db, discord, events, gallery, github, gitops, knowledge, limits, llm, looks, music, notify, opencode, scheduler, updates, usage, voice
 from .config import DATA_DIR, IS_WINDOWS, PUBLIC_DIR, SETTINGS, UPLOADS, WORKSPACE
 from .mcp import MANAGER, PRESETS
 from .tools import GROUPS, TOOLS, ToolError, catalog, check_access, module_available
@@ -1202,7 +1202,7 @@ def usage_stats(h):
         days = max(0, min(3650, int(h.query.get("days", 30))))
     except ValueError:
         days = 30
-    h.send_json(usage.stats(h.user_key, days))
+    h.send_json(dict(usage.stats(h.user_key, days), limits=limits.overview()))
 
 
 @route("GET", "/api/usage/conversations/([a-f0-9]+)")
@@ -1573,6 +1573,48 @@ def agent_job_get(h, jid):
 def agent_job_stop(h, jid):
     job = agents.job(jid)
     h.send_json({"ok": bool(_job_visible(h, job) and job.stop())})
+
+
+@route("POST", "/api/agent-jobs/([a-f0-9]+)/resume")
+def agent_job_resume(h, jid):
+    """A job paused for usage limits: try again now instead of waiting for the reset."""
+    job = agents.job(jid)
+    if not _job_visible(h, job):
+        return h.error("not found", 404)
+    if job.status != "waiting":
+        return h.error("That job is not paused.")
+    limits.clear()  # the user wants another try: let every model be tried again
+    job.resume()
+    h.send_json(job.public())
+
+
+@route("GET", "/api/limits")
+def limits_get(h):
+    h.send_json(limits.overview())
+
+
+@route("POST", "/api/limits/clear")
+def limits_clear(h):
+    limits.clear(str(h.body_json().get("key") or ""))
+    h.send_json(limits.overview())
+
+
+@route("POST", "/api/limits/resume")
+def limits_resume(h):
+    """A chat that waits for usage limits: continue now ("now": true) or not at all."""
+    body = h.body_json()
+    cid = str(body.get("conversation_id") or "")
+    conv = db.get_my_conversation(cid) if cid else None
+    if not conv:
+        return h.error("not found", 404)
+    pending = limits.pending("chat", cid)
+    limits.cancel_resume("chat", cid)
+    if body.get("now") and pending and not events.active_run_for(cid):
+        limits.clear()
+        run = agent.start_turn(cid, limits.CONTINUE, skill=pending.get("skill") or "", model=pending.get("model") or "",
+                               system="Continuing after the usage limits reset")
+        return h.send_json({"ok": True, "run_id": run.id})
+    h.send_json({"ok": True})
 
 
 @route("DELETE", "/api/agent-jobs/([a-f0-9]+|finished)")

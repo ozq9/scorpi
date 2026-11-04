@@ -16,8 +16,8 @@ import urllib.request
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
+from . import limits, usage
 from . import providers as P
-from . import usage
 from .config import SETTINGS
 
 _caps_cache = {}
@@ -47,11 +47,13 @@ RETRYABLE = (401, 402, 403, 404, 408, 409, 410, 413, 429, 500, 502, 503, 504, 52
 
 
 class LLMError(Exception):
-    def __init__(self, message, status=0, retry_after=0, unreachable=False):
+    def __init__(self, message, status=0, retry_after=0, unreachable=False, headers=None, resume_at=0):
         super().__init__(message)
         self.status = status
         self.retry_after = retry_after
         self.unreachable = unreachable
+        self.headers = headers or {}  # the provider's rate-limit headers (see limits.py)
+        self.resume_at = resume_at  # every model is at its limit: when the first one resets
 
     @property
     def retryable(self):
@@ -380,6 +382,7 @@ def cloud_overview(refresh=False):
             "stt": bool(prov.get("stt")), "embed": prov.get("embed", ""), "error": error, "category": prov.get("category", "free"),
             "url": _variant(prov["id"])["url"] if prov["id"] in enabled else prov.get("url", ""), "default_url": prov.get("url", ""),
             "account": prov.get("account", ""), "account_set": bool(_cloud_account(prov["id"])),
+            "resting": limits.for_provider(prov["id"]),
             "extra": (SETTINGS["cloud_extra_models"] or {}).get(prov["id"], ""),
             "models": [dict(m, name=cloud_ref(prov["id"], m["id"])) for m in models],
         })
@@ -391,11 +394,12 @@ def pick_model(need=(), exclude_providers=(), exclude=()):
     need = set(need)
     now = time.time()
     for pid in cloud_order():
-        if pid in exclude_providers or _slow.get(pid, 0) > now:
+        if pid in exclude_providers or _slow.get(pid, 0) > now or limits.provider_resting(pid):
             continue
         models, _ = cloud_models(pid)
         prov = P.BY_ID[pid]
-        eligible = [m for m in models if need <= set(m["caps"]) and cloud_ref(pid, m["id"]) not in exclude]
+        eligible = [m for m in models if need <= set(m["caps"]) and cloud_ref(pid, m["id"]) not in exclude
+                    and not limits.resting(cloud_ref(pid, m["id"]))]
         pats = prov.get("prefer_vision") if "vision" in need else prov["prefer"]
         pick = _prefer(eligible, pats or [])
         if pick:
@@ -408,12 +412,12 @@ def pick_code_model(exclude=(), exclude_providers=()):
     Used when the coding model is "auto" (paid plans come first, then free tiers, then free credits)."""
     now = time.time()
     for pid in cloud_order():
-        if _slow.get(pid, 0) > now or pid in exclude_providers:
+        if _slow.get(pid, 0) > now or pid in exclude_providers or limits.provider_resting(pid):
             continue
         prov = P.BY_ID[pid]
         models, _ = cloud_models(pid)
         eligible = [m for m in models if "tools" in m["caps"] and cloud_ref(pid, m["id"]) not in exclude
-                    and _slow_models.get(cloud_ref(pid, m["id"]), 0) <= now]
+                    and _slow_models.get(cloud_ref(pid, m["id"]), 0) <= now and not limits.resting(cloud_ref(pid, m["id"]))]
         pick = _prefer(eligible, prov.get("prefer_code") or prov["prefer"])
         if pick:
             return cloud_ref(pid, pick["id"])
@@ -438,7 +442,8 @@ def pick_same_provider(model, need=(), exclude=()):
     models, _ = cloud_models(pid)
     need = set(need)
     exclude = set(exclude)
-    eligible = [m for m in models if need <= set(m["caps"]) and cloud_ref(pid, m["id"]) not in exclude]
+    eligible = [m for m in models if need <= set(m["caps"]) and cloud_ref(pid, m["id"]) not in exclude
+                and not limits.resting(cloud_ref(pid, m["id"]))]
     pats = prov.get("prefer_vision") if "vision" in need else prov["prefer"]
     pick = _prefer(eligible, pats or [])
     return cloud_ref(pid, pick["id"]) if pick else ""
@@ -572,7 +577,7 @@ def _http_error(exc):
             detail = err or parsed.get("detail") or parsed.get("message") or parsed.get("title") or detail
     except Exception:
         detail = str(exc)
-    return LLMError(str(detail)[:600], status=status, retry_after=retry_after)
+    return LLMError(str(detail)[:600], status=status, retry_after=retry_after, headers=limits._headers(getattr(exc, "headers", None)))
 
 
 # ---------- models ----------
@@ -739,6 +744,13 @@ def chat_stream(model, messages, tools=None, options=None, cancelled=lambda: Fal
                     _model_noticed.add(model)
                     yield {"type": "switch", "model": alt, "text": "%s has been slow; using %s." % (_label(model), _label(alt))}
                 model = alt
+        elif limits.resting(model):
+            # out of requests until its limit resets: start on another model instead of waiting for a refusal
+            alt = pick_same_provider(model, need, [model]) or pick_model(need, (), [model])
+            if alt and alt != model:
+                yield {"type": "switch", "model": alt, "text": "%s is at its usage limit until %s; using %s."
+                       % (_label(model), limits.clock(limits.resting(model)), _label(alt))}
+                model = alt
     while True:
         started = False
         began = time.time()
@@ -771,19 +783,35 @@ def chat_stream(model, messages, tools=None, options=None, cancelled=lambda: Fal
                     continue
             if exc.status == 408 and is_cloud(model):
                 _slow[split_cloud(model)[0]] = time.time() + SLOW_COOLDOWN
+            limited = not started and bool(limits.hit(model, exc))  # remembered: picks skip it until its limit resets
             if started or not exc.retryable or not SETTINGS["cloud_fallback"] or cancelled():
                 raise
             tried.append(model)
-            alt = pick_model(need, {split_cloud(m)[0] for m in tried if is_cloud(m)}, tried)
-            if not alt and exc.retry_after and exc.retry_after <= 40 and not waited:
-                waited = True
-                yield {"type": "switch", "model": model, "text": "%s is busy; waiting %d s." % (_label(model), exc.retry_after)}
-                deadline = time.time() + exc.retry_after
-                while time.time() < deadline and not cancelled():
-                    time.sleep(0.25)
-                tried.pop()
-                continue
+            alt = pick_model(need, {split_cloud(m)[0] for m in tried if is_cloud(m)}, tried) or pick_model(need, (), tried)
+            if not alt and is_cloud(model):
+                alt = _local_fallback(need)
             if not alt:
+                free_at, _ = limits.next_free()
+                soon = (free_at - time.time()) if free_at else (exc.retry_after or 0)
+                if 0 < soon <= 90 and not waited:
+                    # the first limit resets within a minute or so: wait for it rather than give up
+                    waited = True
+                    yield {"type": "switch", "model": model, "text": "Every model is at its limit for the moment; waiting %d s." % max(1, soon)}
+                    deadline = time.time() + soon
+                    while time.time() < deadline and not cancelled():
+                        time.sleep(0.25)
+                    tried = []
+                    nxt = pick_model(need) if limits.resting(model) else ""
+                    model = nxt or model
+                    continue
+            if not alt:
+                if limited or limits.resting(model):
+                    free_at, key = limits.next_free()
+                    free_at = free_at or time.time() + 300
+                    who = _label(key) if "/" in key else provider_name(key[1:]) if key else _label(model)
+                    raise LLMError("Every model you can use is at its usage limit. %s is the first to reset, at %s; Scorpi "
+                                   "continues by itself then. Add another free provider in Connections → Model to keep going now."
+                                   % (who, limits.clock(free_at)), status=429, resume_at=free_at)
                 raise
             yield {"type": "switch", "model": alt, "text": "%s is unavailable (%s). Switched to %s." % (_label(model), _short(exc), _label(alt))}
             model = alt
@@ -822,7 +850,29 @@ def label(model):
     return _label(model)
 
 
+def provider_name(pid):
+    return (P.BY_ID.get(pid) or P.RETIRED.get(pid) or {}).get("name") or pid
+
+
+def _local_fallback(need):
+    """A local model (Ollama) with the needed abilities, for when every cloud model is out of requests."""
+    if not SETTINGS.get("local_fallback", True) or SETTINGS["provider"] != "ollama":
+        return ""
+    try:
+        names = [m.get("name") or "" for m in _local_models(timeout=3)]
+    except Exception:
+        return ""
+    for name in names:
+        if name and not NON_CHAT.search(name) and set(need) <= capabilities(name):
+            return name
+    return ""
+
+
 def _short(exc):
+    if exc.status == 402 or limits.CREDITS.search(str(exc)):
+        return "out of credits"
+    if limits.DAILY.search(str(exc)):
+        return "daily limit"
     if exc.status == 429 or "rate" in str(exc).lower():
         return "rate limit"
     if exc.status == 408:
@@ -952,6 +1002,7 @@ def _openai_stream(endpoint, model, messages, tools, options, cancelled):
     if url not in _no_usage_option:
         payload["stream_options"] = {"include_usage": True}  # one last chunk with the token counts
     resp = _open_stream(url, payload, headers, model)
+    limits.observe(model, getattr(resp, "headers", None))
 
     content, thinking = "", ""
     used = None
@@ -1090,6 +1141,7 @@ def _anthropic_stream(endpoint, model, messages, tools, options, cancelled):
         payload["tools"] = [{"name": t["function"]["name"], "description": t["function"].get("description", ""),
                              "input_schema": t["function"].get("parameters") or {"type": "object", "properties": {}}} for t in tools]
     resp = _open_stream(endpoint["base"] + "/messages", payload, endpoint["headers"], model)
+    limits.observe(model, getattr(resp, "headers", None))
     content, thinking = "", ""
     used = {"input": 0, "output": 0, "cached": 0}
     blocks = {}

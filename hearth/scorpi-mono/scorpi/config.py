@@ -42,6 +42,8 @@ DEFAULTS = {
     # free cloud providers (keys are added below as key_<id>)
     "cloud_anon": True,  # allow keyless Pollinations when nothing else is available
     "cloud_fallback": True,  # switch to another model when one is rate-limited or offline
+    "auto_resume": True,  # work that paused because every model was at its limit continues when the first one resets
+    "local_fallback": True,  # when every cloud model is out of requests, carry on with a local (Ollama) model
     "cloud_urls": {},  # provider id -> base URL override
     "cloud_extra_models": {},  # provider id -> "model-a, model-b" offered in addition to the live list
     "cloud_accounts": {},  # provider id -> account id its URLs need (Cloudflare)
