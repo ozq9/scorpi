@@ -138,6 +138,7 @@ const composer = {
   groups: null,
   editFrom: null,
   io: 'write', // 'write' or 'voice'
+  plan: false, // a coding project's next message: the agent proposes a plan to approve before it changes anything
 };
 let live = null; // active TurnView
 let controller = null;
@@ -478,7 +479,7 @@ export async function openConversation(id, { keepProject = false } = {}) {
   else Object.assign(state.conversations.find((c) => c.id === id), data.conversation);
   updateHead();
   const frag = document.createDocumentFragment();
-  data.messages.forEach((m, i) => frag.appendChild(m.role === 'user' ? (m.data && m.data.note ? noteNode(m.data.note) : userNode(m)) : assistantNode(m, i === data.messages.length - 1)));
+  data.messages.forEach((m, i) => frag.appendChild(m.role === 'user' ? (m.data && m.data.system ? systemNode(m.data.system) : m.data && m.data.note ? noteNode(m.data.note) : userNode(m)) : assistantNode(m, i === data.messages.length - 1)));
   els.messages.appendChild(frag);
   if (!keepProject) canvasLoad(data.messages, id);
   wireCode(els.messages);
@@ -490,6 +491,11 @@ export async function openConversation(id, { keepProject = false } = {}) {
 // A turn Scorpi started itself (an agent reporting back), shown as a quiet line instead of a user bubble.
 function noteNode(label) {
   return h('div.msg.note', icon('agent'), h('span', 'Update from ', h('b', label)));
+}
+
+// A run an agent started by itself (building an approved plan): a quiet line instead of its long prompt.
+function systemNode(text) {
+  return h('div.msg.note', icon('route'), h('span', text));
 }
 
 // The chat assistant reports on a finished agent job: follow it live when that conversation is on screen.
@@ -903,7 +909,42 @@ function speakButton(text) {
   return btn;
 }
 
+// The coder's plan, to approve, change in words, or reject (plan mode, Antigravity-style review).
+function planCard(ev) {
+  const sum = ev.summary || {};
+  const result = h('div.ap-result');
+  const note = h('textarea.input.plan-note', { rows: 2, placeholder: 'What should change? (optional when approving)' });
+  const decide = async (decision) => {
+    const text = note.value.trim();
+    if (decision === 'deny' && !text && !(await confirmSheet('Reject the plan?', 'The agent stops. To get a better plan instead, write what should change and press Request changes.', { confirm: 'Reject', danger: true }))) return;
+    card.querySelectorAll('button, textarea').forEach((b) => (b.disabled = true));
+    try {
+      await api.post('/api/approvals/' + ev.id, { decision, note: text });
+    } catch (err) {
+      card.querySelectorAll('button, textarea').forEach((b) => (b.disabled = false));
+      toast(err.message, 'error');
+    }
+  };
+  const body = h('div.plan-body.md');
+  body.innerHTML = renderMarkdown(sum.plan || '');
+  const card = h(
+    'div.approval.plan-review',
+    { dataset: { approval: ev.id } },
+    h('div.ap-head', icon('route'), sum.title || 'Review the plan'),
+    h('div.ap-sub', 'Nothing has changed yet. Approve to start building, or say what to change.'),
+    body,
+    h('div.ap-actions.col', note, h('div.ap-actions',
+      h('button.btn.primary.small', { onclick: () => decide('allow') }, icon('check'), 'Approve & build'),
+      h('button.btn.small', { onclick: () => (note.value.trim() ? decide('deny') : (note.focus(), toast('Write what should change first', 'warn'))) }, icon('edit'), 'Request changes'),
+      h('button.btn.quiet.small', { onclick: () => decide('deny') }, 'Reject'),
+    )),
+    result,
+  );
+  return card;
+}
+
 function approvalCard(ev) {
+  if (ev.tool === 'submit_plan') return planCard(ev);
   const sum = ev.summary || {};
   const args = sum.args || ev.args || {};
   const pretty = args.command || args.code || JSON.stringify(args, null, 2);
@@ -912,7 +953,7 @@ function approvalCard(ev) {
     'div.approval',
     { dataset: { approval: ev.id } },
     h('div.ap-head', icon('shield'), sum.title || 'Allow this action?'),
-    h('div.ap-sub', `Tool: ${ev.tool}. Scorpi paused until you decide.`),
+    h('div.ap-sub', `Tool: ${ev.tool}. ${sum.why ? sum.why + ' ' : ''}Scorpi paused until you decide.`),
     h('pre', pretty),
     h(
       'div.ap-actions',
@@ -982,13 +1023,17 @@ export function resolveQuestionCard(id, answer) {
   });
 }
 
-export function resolveApprovalCard(id, decision) {
+export function resolveApprovalCard(id, decision, note = '') {
   document.querySelectorAll(`[data-approval="${id}"]`).forEach((card) => {
     if (card.classList.contains('resolved')) return;
     card.classList.add('resolved');
     const actions = card.querySelector('.ap-actions');
     if (actions) actions.remove();
-    card.querySelector('.ap-result').textContent = decision === 'deny' ? 'Declined.' : decision === 'always' ? 'Allowed (always).' : 'Allowed.';
+    const plan = card.classList.contains('plan-review');
+    card.querySelectorAll('.plan-note').forEach((n) => n.remove());
+    card.querySelector('.ap-result').textContent = plan
+      ? (decision === 'deny' ? (note ? 'Changes requested: ' + note : 'Plan rejected.') : 'Plan approved' + (note ? ': ' + note : '') + '. Building it now.')
+      : decision === 'deny' ? 'Declined.' : decision === 'always' ? 'Allowed (always).' : 'Allowed.';
   });
 }
 
@@ -1108,7 +1153,7 @@ function applyEvent(view, ev) {
       view.approval(ev);
       break;
     case 'approval_done':
-      resolveApprovalCard(ev.id, ev.decision);
+      resolveApprovalCard(ev.id, ev.decision, ev.note);
       break;
     case 'question':
       view.question(ev);
@@ -1307,6 +1352,11 @@ export async function send(textOverride, opts = {}) {
     clear(els.messages);
   }
   const project = state.project;
+  const planNext = composer.plan && agentConversation();
+  if (composer.plan) {
+    composer.plan = false;
+    updateModeChip();
+  }
   const userMsg = { id: 'local-' + Date.now(), content: opts.display || body, data: { attachments, command: opts.command || '' } };
   els.messages.querySelectorAll('.msg.last').forEach((n) => n.classList.remove('last'));
   const fresh = userNode(userMsg);
@@ -1329,7 +1379,7 @@ export async function send(textOverride, opts = {}) {
     await streamJSON('/api/chat', {
       body: {
         conversation_id: state.activeId, text: body, display: opts.display || '', command: opts.command || '', attachments, skill, groups: composer.groups, model: state.chatModel || '',
-        project: project ? project.slug : '', title: project ? project.name : '', device: deviceId(),
+        project: project ? project.slug : '', title: project ? project.name : '', device: deviceId(), mode: planNext ? 'plan' : '',
       },
       signal: controller.signal,
       onEvent: (ev) => {
@@ -1392,7 +1442,7 @@ async function retryLast() {
   const last = users[users.length - 1];
   if (!last) return;
   const data = await api.get('/api/conversations/' + state.activeId);
-  const msg = data.messages.filter((m) => m.role === 'user' && !(m.data && m.data.note)).pop();
+  const msg = data.messages.filter((m) => m.role === 'user' && !(m.data && (m.data.note || m.data.system))).pop();
   if (!msg) return;
   composer.editFrom = msg.id;
   send(msg.content);
@@ -1495,7 +1545,62 @@ const pluginSkills = () => [...pluginCommands.keys()].filter((k) => !skillById(k
 
 const placeholderFor = (s) => (s ? `${s.name}: ${s.description}` : isMobile() ? 'Ask anything…' : 'Ask anything, or type / for a skill');
 
+// ---------- how an agent works: plan first, and what it may do without asking (scorpi/safety.py) ----------
+
+const AUTONOMY = [
+  ['ask', 'Ask first', 'shield', 'Asks before every command and code run.'],
+  ['auto', 'Auto', 'bolt', 'Builds, tests and edits the project itself; asks for the rest.'],
+  ['full', 'Full auto', 'wand', 'Does everything except destructive commands.'],
+];
+
+function updateModeChip() {
+  if (!els.modeBtn) return;
+  const show = agentConversation();
+  els.modeBtn.classList.toggle('hidden', !show);
+  if (!show) return;
+  const level = AUTONOMY.find(([k]) => k === (state.settings && state.settings.autonomy)) || AUTONOMY[1];
+  els.modeLabel.textContent = composer.plan ? 'Plan first' : level[1];
+  els.modeBtn.classList.toggle('set', composer.plan || level[0] !== 'auto');
+  els.modeBtn.querySelector('use').setAttribute('href', '#i-' + (composer.plan ? 'route' : level[2]));
+}
+
+async function setAutonomy(value) {
+  try {
+    state.settings = await api.post('/api/settings', { autonomy: value });
+    bus.emit('settings', state.settings);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+  updateModeChip();
+}
+
+function modeMenu() {
+  if (menuKind === 'mode') return closeComposerMenu();
+  const current = (state.settings && state.settings.autonomy) || 'auto';
+  composerMenu('mode', '', [
+    { name: 'Plan first', desc: 'Next message: approve a plan before anything is built.', icon: 'route', checked: composer.plan,
+      onPick: () => { composer.plan = !composer.plan; updateModeChip(); } },
+    'sep',
+    ...AUTONOMY.map(([key, name, ic, desc]) => ({ name, desc, icon: ic, checked: current === key, onPick: () => setAutonomy(key) })),
+  ]);
+}
+
+/** Shift+Tab: Auto → Plan first → Full auto → Ask first → Auto. */
+function cycleMode() {
+  const current = (state.settings && state.settings.autonomy) || 'auto';
+  if (composer.plan) {
+    composer.plan = false;
+    setAutonomy('full');
+  } else if (current === 'auto') {
+    composer.plan = true;
+    updateModeChip();
+  } else {
+    setAutonomy(current === 'full' ? 'ask' : 'auto');
+  }
+}
+
 function updateSkillChip() {
+  updateModeChip();
   const job = agentJob();
   const s = job ? null : anySkill(composer.skill);
   els.skillBtn.classList.toggle('set', !!s || !!job);
@@ -1667,7 +1772,7 @@ function composerMenu(kind, title, rows, { anchor = null, search = '' } = {}) {
   if (sel && search) sel.scrollIntoView({ block: 'nearest' });
   menuKind = kind;
   const away = (e) => {
-    if (!els.slash.contains(e.target) && !e.target.closest('#skillBtn, #toolsBtn, #modelBtn')) closeComposerMenu();
+    if (!els.slash.contains(e.target) && !e.target.closest('#skillBtn, #toolsBtn, #modelBtn, #modeBtn')) closeComposerMenu();
   };
   const esc = (e) => {
     if (e.key === 'Escape') closeComposerMenu();
@@ -2021,6 +2126,8 @@ export function initChat() {
     skillLabel: $('#skillLabel'),
     toolsBtn: $('#toolsBtn'),
     toolsLabel: $('#toolsLabel'),
+    modeBtn: $('#modeBtn'),
+    modeLabel: $('#modeLabel'),
     modelBtn: $('#modelBtn'),
     modelLabel: $('#modelLabel'),
     mic: $('#micBtn'),
@@ -2073,6 +2180,10 @@ export function initChat() {
       e.preventDefault();
       send();
     }
+    if (e.key === 'Tab' && e.shiftKey && agentConversation()) {
+      e.preventDefault();
+      cycleMode();
+    }
     if (e.key === 'Backspace' && !els.input.value && composer.skill) setSkill('');
   });
   els.input.addEventListener('paste', (e) => {
@@ -2092,6 +2203,8 @@ export function initChat() {
   els.skillBtn.dataset.popAnchor = '';
   els.toolsBtn.addEventListener('click', toolsMenu);
   els.toolsBtn.dataset.popAnchor = '';
+  els.modeBtn.addEventListener('click', modeMenu);
+  els.modeBtn.dataset.popAnchor = '';
   els.modelBtn.addEventListener('click', modelMenu);
   els.modelBtn.dataset.popAnchor = '';
   els.mic.addEventListener('click', toggleDictation);
@@ -2176,9 +2289,16 @@ export function initChat() {
   bus.on('server:agent_job', (d) => {
     if (!d || !d.conv_id || d.conv_id !== state.activeId) return;
     if (watching && watching.id !== d.id && watching.started > d.started) return;
+    const before = watching;
     watching = d;
     updateModelChip();
     updateSkillChip();
+    // the job started a new run by itself (building the approved plan, a message that came in late): follow it live
+    if (d.status === 'running' && d.run_id && !live && state.view === 'chat' && before && before.run_id && before.run_id !== d.run_id) {
+      els.messages.querySelectorAll('.msg.last').forEach((n) => n.classList.remove('last'));
+      if (d.run_note) els.messages.appendChild(systemNode(d.run_note));
+      attachRun(d.run_id, d.conv_id);
+    }
   });
   bus.on('compose:send', (msg) => (typeof msg === 'string' ? send(msg) : send(msg.text, { display: msg.display, command: msg.command })));
   // the project pane started work in another conversation of the project (e.g. the coder fixing an issue): follow it

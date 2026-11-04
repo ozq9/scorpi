@@ -164,6 +164,8 @@ body.col-resizing { cursor: col-resize; user-select: none; }
 .pa-meta { font: var(--t-xs) var(--font-mono); color: var(--faint); }
 .pa-ask { display: flex; align-items: center; gap: var(--s-5); padding: var(--s-5) var(--s-6); margin-top: var(--s-4); border-radius: var(--r-3); background: var(--warn-soft); color: var(--ink); font-size: var(--t-md); }
 .pa-ask > svg { width: 16px; height: 16px; color: var(--warn); }
+.pa-ask.plan { background: color-mix(in oklab, var(--info) 12%, transparent); flex-wrap: wrap; }
+.pa-ask.plan > svg { color: var(--info); }
 .pc-sec { display: flex; flex-direction: column; gap: var(--s-4); margin-top: var(--s-8); }
 .pa-h { display: flex; align-items: center; gap: var(--s-4); font: var(--w-medium) var(--t-xs) var(--font-mono); text-transform: uppercase; letter-spacing: var(--track-caps); color: var(--faint); }
 .pa-h .count { margin-left: auto; text-transform: none; letter-spacing: 0; }

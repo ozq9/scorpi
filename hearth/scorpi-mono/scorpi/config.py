@@ -48,6 +48,7 @@ DEFAULTS = {
     "code_model": "",  # model for the Code skill and coder sub-agents ("" = the chat model, "auto" = the best coder on offer)
     "coder_backend": "auto",  # auto (OpenCode when installed) | scorpi (Scorpi's own tools)
     "checkpoints": True,  # save a project's files before and after every agent run (scorpi/gitops.py), to look at or undo
+    "autonomy": "auto",  # ask | auto | full: what agents may do without asking (scorpi/safety.py)
     "github_token": "",  # the GitHub account the Code area and the coder use (scorpi/github.py)
     "user_name": "",
     # voice

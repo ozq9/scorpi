@@ -446,7 +446,7 @@ def _tool(name, args, workdir):
 class Turn(events.Run):
     """A Scorpi run backed by an engine session: same events, same follow/cancel, plus send() for messages while it works."""
 
-    def __init__(self, conv_id, title, agent, workdir, prompt, session, on_session):
+    def __init__(self, conv_id, title, agent, workdir, prompt, session, on_session, system=""):
         super().__init__(conv_id, title=title, origin="agent")
         self.agent = agent
         self.workdir = workdir
@@ -454,7 +454,7 @@ class Turn(events.Run):
         self.session = session
         self.on_session = on_session
         self.model_ref = agent.get("model") or llm.coding_model() or SETTINGS["model"] or ""
-        self.user_mid = db.add_message(conv_id, "user", prompt, {"attachments": [], "skill": "code"})
+        self.user_mid = db.add_message(conv_id, "user", prompt, {"attachments": [], "skill": "code", **({"system": system} if system else {})})
         self.assistant_mid = db.new_id()
         self.parts, self.files, self.texts = [], [], []
         self.tools = {}  # engine call id -> part
@@ -810,8 +810,9 @@ def answer(answers, form_id):
     return True
 
 
-def start(conv_id, prompt, agent, workdir, session="", on_session=None, title=""):
-    """Like agent.start_turn, but the turn runs on the coding engine. Returns the Run; on_session(id) receives the session."""
-    turn = Turn(conv_id, title, agent, workdir, prompt, session, on_session)
+def start(conv_id, prompt, agent, workdir, session="", on_session=None, title="", system=""):
+    """Like agent.start_turn, but the turn runs on the coding engine. Returns the Run; on_session(id) receives the session.
+    system: a short line the chat shows instead of the prompt (a run Scorpi started itself)."""
+    turn = Turn(conv_id, title, agent, workdir, prompt, session, on_session, system)
     events.register_run(turn)
     return turn.begin()

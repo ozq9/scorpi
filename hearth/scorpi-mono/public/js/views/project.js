@@ -360,8 +360,17 @@ function agentsNode() {
       job.steps_total ? h('div.job-progress', h('div.jp-bar', h('i', { style: { width: pct + '%' } })), h('span.jp-text', `${job.steps_done}/${job.steps_total} steps`)) : null,
     ),
   ];
-  if (job.approval) {
-    nodes.push(h('div.pa-ask', icon('shield'), h('div.grow', h('b', 'Wants to: '), job.approval.title || job.approval.tool),
+  if (job.approval && job.approval.plan) {
+    // plan mode: the plan is in the chat to read and comment on; approve it here too
+    nodes.push(h('div.pa-ask.plan', icon('route'), h('div.grow', h('b', 'Plan ready: '), job.approval.title || 'review it in the chat'),
+      h('button.btn.small.primary', { onclick: () => decide(job.approval.id, 'allow') }, icon('check'), 'Approve & build'),
+      h('button.btn.small.quiet', { title: 'Write what should change in the plan card in the chat', onclick: () => {
+        const card = document.querySelector(`.plan-review[data-approval="${job.approval.id}"]`);
+        if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); const note = card.querySelector('.plan-note'); if (note) note.focus(); }
+      } }, 'Changes…')));
+  } else if (job.approval) {
+    nodes.push(h('div.pa-ask', icon('shield'), h('div.grow', h('b', 'Wants to: '), job.approval.title || job.approval.tool,
+      job.approval.why ? h('div.muted.small', job.approval.why) : null),
       h('button.btn.small.primary', { onclick: () => decide(job.approval.id, 'allow') }, 'Allow'),
       h('button.btn.small.quiet', { onclick: () => decide(job.approval.id, 'deny') }, 'Deny')));
   }

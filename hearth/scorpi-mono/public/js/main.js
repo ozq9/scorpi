@@ -352,7 +352,7 @@ function onServerEvent(ev) {
       }, 900);
       break;
     case 'approval_done':
-      chat.resolveApprovalCard(d.id, d.decision);
+      chat.resolveApprovalCard(d.id, d.decision, d.note);
       break;
     case 'conversation':
       chat.onConversationEvent(d);

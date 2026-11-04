@@ -157,6 +157,14 @@ button.att-pill:hover { box-shadow: inset 0 0 0 1px var(--line); }
 .approval.resolved { opacity: .6; border-color: var(--line); }
 .approval .ap-result { font-size: var(--t-md); color: var(--muted); }
 .approval.question { border-color: var(--line); }
+/* plan mode: the agent's plan to approve before it builds */
+.approval.plan-review { border-color: color-mix(in oklab, var(--info) 45%, var(--line)); }
+.approval.plan-review .ap-head svg { color: var(--info); }
+.approval.plan-review .plan-body { max-height: 420px; overflow: auto; padding: var(--s-5) var(--s-6); margin-bottom: var(--s-6); border-radius: var(--r-3); background: var(--fill-1); font-size: var(--t-md); }
+.approval.plan-review .plan-body > :first-child { margin-top: 0; }
+.approval.plan-review .plan-body > :last-child { margin-bottom: 0; }
+.approval .ap-actions.col { flex-direction: column; align-items: stretch; }
+.approval .plan-note { width: 100%; resize: vertical; min-height: 44px; }
 .approval.question .ap-head svg { color: var(--ink); }
 .approval.question .q-field { margin: var(--s-4) 0 var(--s-6); }
 .approval.question .q-title { font-weight: var(--w-medium); font-size: var(--t-md); }
@@ -298,6 +306,8 @@ html.style-visual .trace:not(.open) { margin: var(--s-2) 0; }
 .card.code .out.files { display: flex; flex-wrap: wrap; gap: var(--s-4); padding: var(--s-5) var(--s-7); }
 /* an agent's edit: the change as a diff, then the syntax checks of the new code */
 .card.diff .dv { padding: var(--s-4); gap: var(--s-2); max-height: 420px; overflow: auto; }
+.card.diff.single .dv { padding: 0; }
+.card.diff.single .dv-file { border: 0; border-radius: 0; }
 .card.diff .card-head .dv-n { margin-left: auto; }
 .card.diff .diff-checks { display: flex; gap: var(--s-4); align-items: flex-start; padding: var(--s-4) var(--s-7); border-top: 1px solid var(--line-2);
   font: 12px/1.5 var(--font-mono); white-space: pre-wrap; word-break: break-word; }
@@ -414,6 +424,12 @@ html.style-visual .trace:not(.open) { margin: var(--s-2) 0; }
 .job-approval { display: flex; align-items: center; gap: var(--s-5); padding: var(--s-5) var(--s-6); border-radius: var(--r-3); background: var(--warn-soft); font-size: var(--t-md); flex-wrap: wrap; }
 .job-approval > svg { width: 17px; height: 17px; color: var(--warn); flex: none; }
 .job-approval .ja-text { flex: 1; min-width: 180px; }
+.job-approval .ja-why { display: block; margin-top: var(--s-2); font-size: var(--t-xs); color: var(--warn); }
+.job-approval.plan { background: color-mix(in oklab, var(--info) 12%, transparent); }
+.job-approval.plan > svg { color: var(--info); }
+.job-approval .ja-plan { flex-basis: 100%; order: 3; font-size: var(--t-md); }
+.job-approval .ja-plan summary { cursor: pointer; color: var(--muted); }
+.job-approval .jp-plan { max-height: 320px; overflow: auto; margin-top: var(--s-4); }
 .job-approval .ja-arg { display: block; margin-top: var(--s-2); font: var(--t-xs) var(--font-mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .job-result { font-size: var(--t-md); color: var(--ink-2); white-space: pre-wrap; max-height: 9.5em; overflow: hidden; padding: var(--s-5) var(--s-6); background: var(--fill-1); border-radius: var(--r-3); }
 .job-result.err { color: var(--danger); }

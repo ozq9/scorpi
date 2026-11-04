@@ -785,6 +785,7 @@ def chat(h):
     cid = body.get("conversation_id")
     conv = db.get_my_conversation(cid) if cid else None  # someone else's chat id just starts a new chat
     project = str(body.get("project") or "")
+    plan = body.get("mode") == "plan"  # the Code area's "Plan first": the coder proposes a plan to approve before building
     if project and not conv:
         # the Code area: a message in a project goes to its agent, or starts the coder on it
         job = agents.latest_job(project)
@@ -792,7 +793,7 @@ def chat(h):
             conv = db.get_conversation(job.conv_id)
         else:
             try:
-                job = agents.assign("coder", text, title=body.get("title") or project.replace("-", " ").capitalize(), project=project)
+                job = agents.assign("coder", text, title=body.get("title") or project.replace("-", " ").capitalize(), project=project, plan=plan)
             except ValueError as exc:
                 return h.error(str(exc))
             return follow_run(h, job.run)
@@ -804,7 +805,7 @@ def chat(h):
         # an agent job's own conversation: the message goes to the agent, which carries on in the same chat
         busy = events.active_run_for(conv["id"])
         try:
-            job.message(text)
+            job.message(text, plan=plan)
         except Exception as exc:
             return h.error(str(exc))
         return follow_run(h, job.run, len(job.run.events) if busy is job.run else 0)
@@ -869,13 +870,14 @@ def approvals(h):
 
 @route("POST", "/api/approvals/([a-f0-9]+)")
 def approval_decide(h, aid):
-    decision = h.body_json().get("decision", "deny")
+    body = h.body_json()
+    decision = body.get("decision", "deny")
     if decision not in ("allow", "deny", "always"):
         decision = "deny"
     pending = next((a for a in events.approvals_snapshot() if a["id"] == aid), None)
     if pending and not mine_event(pending, h.user_key):
         return h.error("not found", 404)  # what someone else's chat asks to do is theirs to decide
-    h.send_json({"ok": events.resolve_approval(aid, decision)})
+    h.send_json({"ok": events.resolve_approval(aid, decision, body.get("note") or "")})
 
 
 # ---------- uploads & files ----------
@@ -1589,7 +1591,8 @@ def agent_job_message(h, jid):
     if not _job_visible(h, job):
         return h.error("not found", 404)
     try:
-        h.send_json({"ok": True, "how": job.message(h.body_json().get("text"))})
+        body = h.body_json()
+        h.send_json({"ok": True, "how": job.message(body.get("text"), plan=body.get("mode") == "plan")})
     except ValueError as exc:
         h.error(str(exc))
 
@@ -1766,7 +1769,7 @@ def project_create(h):
     if agents.latest_job(folder) and os.path.isdir(agents.project_path(folder)) and not body.get("continue"):
         folder = "%s-%s" % (folder, time.strftime("%m%d-%H%M"))  # a new project never takes over an old one's folder
     try:
-        job = agents.assign(body.get("agent") or "coder", task, title=name, project=folder)
+        job = agents.assign(body.get("agent") or "coder", task, title=name, project=folder, plan=body.get("mode") == "plan")
     except ValueError as exc:
         return h.error(str(exc))
     h.send_json({"slug": folder, "job": job.public(), "conv_id": job.conv_id, "run_id": job.run.id})

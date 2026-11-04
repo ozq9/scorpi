@@ -105,6 +105,55 @@ def update_plan(ctx, steps, note=""):
     )
 
 
+def plan_steps(plan):
+    """Numbered or bulleted top-level lines of a Markdown plan -> [{title, status}] for the job's checklist."""
+    steps = []
+    for line in str(plan or "").splitlines():
+        m = re.match(r"^(?:\d+[.)]|[-*+])\s+(?:\[[ x]\]\s*)?(.+)$", line)
+        if m:
+            title = re.sub(r"`|\*\*|__|(?<!\w)[*_]|[*_](?!\w)", "", m.group(1)).strip()
+            if title:
+                steps.append({"title": title[:160], "status": "pending"})
+    return steps[:30]
+
+
+@tool(
+    "submit_plan",
+    "PLAN MODE ONLY: hand your plan to the user for review. They approve it (then the work starts), ask for changes "
+    "(you get their words: revise and submit again) or reject it.",
+    {"plan": "string: The plan in Markdown: goal, findings, numbered steps (files to add or change and how), how you will test it, open questions",
+     "title?": "string: A short title for the plan"},
+)
+def submit_plan(ctx, plan, title=""):
+    from .. import events
+    agent = ctx.agent
+    if not getattr(agent, "plan_mode", False):
+        raise ToolError("You are not in plan mode: go ahead with the work.")
+    plan = str(plan or "").strip()
+    if len(plan) < 20:
+        raise ToolError("Write the whole plan in plan (Markdown with numbered steps).")
+    title = str(title or "").strip()[:120] or "Review the plan"
+    steps = plan_steps(plan)
+    if agent.run:
+        decision, note = events.request_approval(agent.run, "submit_plan", {"title": title},
+                                                 {"title": title, "plan": plan, "kind": "plan"}, timeout=24 * 3600, with_note=True)
+    else:
+        decision, note = "allow", ""
+    if decision in ("allow", "always"):
+        agent.plan_mode = False
+        agent.approved_plan = plan
+        agent.stop_after_tools = True
+        agent.emit({"type": "plan_approved", "plan": plan, "note": note, "title": title})
+        extra = (" with this note: %s" % note) if note else ""
+        return Result("The user approved the plan%s. Stop here with one short sentence; the building starts right after." % extra,
+                      display={"type": "plan", "steps": steps, "note": "Approved" + (": " + note if note else "")})
+    if note:
+        return Result("The user wants changes before approving:\n%s\nRevise the plan (look at more code if needed) and call "
+                      "submit_plan again." % note, ok=False)
+    agent.stop_after_tools = True
+    return Result("The user rejected the plan. Stop, and say in one or two sentences what you would need to plan it differently.", ok=False)
+
+
 @tool(
     "send_notification",
     "Send an alert to the user: shows in the app on every device, as a desktop notification on the host, "

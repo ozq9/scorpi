@@ -227,6 +227,9 @@ class Job:
         self.started = time.time()
         self.updated = self.started
         self.checkpoint = ""  # the checkpoint taken before the current run (scorpi/gitops.py)
+        self.planning = False  # this run only plans (read-only) and asks the user to approve the plan
+        self.run_note = ""  # what the chat shows for a run the job started by itself
+        self.approved_plan = ""  # set when the user approves: the job then builds it in a new run
         self._published = 0.0
 
     def kwargs(self):
@@ -259,21 +262,26 @@ class Job:
         self.publish(force=True)
         return live
 
-    def start(self, prompt):
+    def start(self, prompt, plan=False, system=""):
+        """Start a run. plan: look around and propose a plan first; the building starts once the user approves it.
+        system: a short line the chat shows instead of the prompt, for runs the job starts by itself."""
         from .agent import start_turn
         self.subs = {}  # helpers belong to one run
+        self.planning = bool(plan)
+        self.approved_plan = ""
         if self.workdir and self.project and SETTINGS.get("checkpoints", True):
             # the files as they are before the agent touches them: Changes shows the run's diff, and it can be undone
             self.checkpoint = gitops.snapshot(self.project, self.workdir, "Before: %s — %s" % (self.title, _first_line(prompt)[:120]))
-        if self.workdir and opencode.use_for(self.agent):
+        if self.workdir and opencode.use_for(self.agent) and not plan:
             agent = dict(self.agent, model=self.model) if self.model else self.agent
             run = opencode.start(self.conv_id, prompt, agent, self.workdir, session=self.oc_session, on_session=self._on_session,
-                                 title=self.title)
+                                 title=self.title, system=system)
         else:
             groups = json.loads(self.agent.get("groups") or "[]") or None
             run = start_turn(self.conv_id, prompt, skill=self.agent.get("skill") or "", groups=groups, origin="agent",
-                             title_hint=self.title, agent_kwargs=self.kwargs())
+                             title_hint=self.title, agent_kwargs=dict(self.kwargs(), plan_mode=bool(plan)), system=system)
         self.run = run
+        self.run_note = system
         self.status, self.error, self.approval, self.question = "running", "", None, None
         if self.id is None:
             self.id = run.id
@@ -338,9 +346,17 @@ class Job:
             if running and not self.approval and not self.question:
                 self.activity = "%d helper%s working in parallel" % (running, "" if running == 1 else "s")
         elif kind == "approval":
-            self.approval = {"id": ev.get("id"), "tool": ev.get("tool"), "title": (ev.get("summary") or {}).get("title") or ev.get("tool"),
-                             "args": (ev.get("summary") or {}).get("args") or {}}
-            self.activity = "Waiting for your approval"
+            summary = ev.get("summary") or {}
+            self.approval = {"id": ev.get("id"), "tool": ev.get("tool"), "title": summary.get("title") or ev.get("tool"),
+                             "args": summary.get("args") or {}, "why": summary.get("why") or "", "plan": summary.get("plan") or ""}
+            self.activity = "Waiting for you to review the plan" if summary.get("plan") else "Waiting for your approval"
+        elif kind == "plan_approved":
+            self.approved_plan = ev.get("plan") or ""
+            if ev.get("note"):
+                self.approved_plan += "\n\nThe user's note on approving it: " + ev["note"]
+            from .tools.core import plan_steps
+            self.plan = _plan(plan_steps(self.approved_plan))
+            self.activity = "Plan approved, starting to build"
         elif kind == "approval_done":
             self.approval = None
         elif kind == "question":
@@ -363,6 +379,13 @@ class Job:
         self.publish(force=True)
 
     def _settle(self, run):
+        if self.approved_plan and not run.cancelled:
+            # the plan was approved: build it, on the coding engine this agent normally uses
+            plan, notes = self.approved_plan, list(run.inbox)
+            run.inbox[:] = []
+            return self.start("Build the plan the user approved, step by step, and keep update_plan current:\n\n%s%s"
+                              % (plan, ("\n\nThe user also wrote:\n" + "\n\n".join(notes)) if notes else ""),
+                              system="Plan approved: building it")
         if run.inbox and not run.cancelled:
             # the user wrote after the agent's last step: carry on with it
             notes, run.inbox[:] = list(run.inbox), []
@@ -417,7 +440,8 @@ class Job:
         run = start_turn(self.parent_conv, prompt, groups=["agents"], origin="agent_update", note=note)
         events.publish("agent_update", {"conv_id": self.parent_conv, "run_id": run.id, "job_id": self.id, "note": note})
 
-    def message(self, text):
+    def message(self, text, plan=False):
+        """Pass the user's words on: at once to a running agent, else as a new run (plan: propose a plan first)."""
         text = str(text or "").strip()
         if not text:
             raise ValueError("Empty message.")
@@ -431,7 +455,7 @@ class Job:
             self.activity = "Got your message, reading it"
             self.publish(force=True)
             return "delivered"
-        self.start(text)
+        self.start(text, plan=plan)
         return "restarted"
 
     def stop(self):
@@ -450,7 +474,9 @@ class Job:
                 "plan": self.plan, "steps_done": done, "steps_total": len(self.plan), "tools": self.tools, "approval": self.approval, "question": self.question,
                 "error": self.error, "result": self.result[:1500], "files": self.files[:20], "started": self.started,
                 "updated": self.updated, "conv_id": self.conv_id, "parent_conv": self.parent_conv, "origin": self.origin,
-                "workdir": self.workdir, "project": self.project, "checkpoint": self.checkpoint, "live": True}
+                "workdir": self.workdir, "project": self.project, "checkpoint": self.checkpoint, "live": True,
+                "planning": self.planning and self.status == "running", "run_id": self.run.id if self.run else "",
+                "run_note": self.run_note}
 
     def publish(self, force=False):
         now = time.time()
@@ -509,8 +535,9 @@ def _first_line(text):
     return next((line.strip() for line in str(text or "").splitlines() if line.strip()), "")
 
 
-def assign(agent, task, title="", parent_conv="", origin="agent", project="", conv_id=None, model=""):
-    """Hand a job to an agent; it starts at once in the background. Returns the Job."""
+def assign(agent, task, title="", parent_conv="", origin="agent", project="", conv_id=None, model="", plan=False):
+    """Hand a job to an agent; it starts at once in the background (plan: with a plan for the user to approve first).
+    Returns the Job."""
     if isinstance(agent, str):
         row = get(agent)
         if not row:
@@ -532,7 +559,7 @@ def assign(agent, task, title="", parent_conv="", origin="agent", project="", co
     if parent_conv:
         prompt += "\n\n(Handed over by Scorpi's chat assistant on the user's behalf.)"
     return Job(agent, title, task, conv["id"], parent_conv=parent_conv, origin=origin, workdir=workdir, project=folder,
-               model=model).start(prompt)
+               model=model).start(prompt, plan=plan)
 
 
 def job(job_id):

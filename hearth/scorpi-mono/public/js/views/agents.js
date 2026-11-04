@@ -2,6 +2,7 @@
 
 import { api } from '../lib/api.js';
 import { $$, clear, fmtRelative, h, icon } from '../lib/dom.js';
+import { renderMarkdown } from '../lib/md.js';
 import { confirmSheet, emptyState, field, seg, selectEl, sheet, switchEl, toast } from '../lib/ui.js';
 import { bus } from '../store.js';
 import { navigate } from '../router.js';
@@ -88,7 +89,9 @@ export function jobCard(job, { compact = false } = {}) {
         })()
       : null,
     running || !compact ? helpersBlock(job, { compact }) : null,
-    job.approval
+    job.approval && job.approval.plan
+      ? planBlock(job)
+      : job.approval
       ? h(
           'div.job-approval',
           { dataset: { approval: job.approval.id } }, // tells the app not to toast an approval that is already on screen
@@ -110,6 +113,34 @@ export function jobCard(job, { compact = false } = {}) {
     ),
   );
   return card;
+}
+
+// The plan an agent proposes before building (plan mode): read it, approve, or say what to change.
+function planBlock(job) {
+  const a = job.approval;
+  const body = h('div.jp-plan.md');
+  body.innerHTML = renderMarkdown(a.plan);
+  return h(
+    'div.job-approval.plan',
+    { dataset: { approval: a.id } },
+    icon('route'),
+    h('div.ja-text', h('b', job.agent_name + ' proposes a plan: '), a.title && a.title !== 'Review the plan' ? a.title : 'review it before anything changes'),
+    h('details.ja-plan', h('summary', 'Read the plan'), body),
+    h('button.btn.small.accent', { onclick: () => decide(a.id, 'allow') }, icon('check'), 'Approve & build'),
+    h('button.btn.small.quiet', { onclick: () => planChanges(job) }, 'Changes…'),
+  );
+}
+
+function planChanges(job) {
+  const text = h('textarea.input', { rows: 4, placeholder: 'e.g. Skip step 3, and use SQLite instead of JSON files.' });
+  sheet({
+    title: 'Change ' + job.agent_name + "'s plan",
+    body: h('div', h('p.section-desc', job.agent_name + ' revises the plan with your notes and shows it again. Nothing has changed yet.'), field('What should change', text)),
+    foot: (close) => [
+      h('button.btn.quiet', { onclick: async () => { close(); await decide(job.approval.id, 'deny', ''); } }, 'Reject the plan'),
+      h('button.btn.primary', { onclick: async () => { if (!text.value.trim()) return text.focus(); close(); await decide(job.approval.id, 'deny', text.value.trim()); } }, 'Request changes'),
+    ],
+  });
 }
 
 function questionBlock(job) {
@@ -136,12 +167,12 @@ async function answer(id, answers) {
 function approvalDetail(a) {
   const args = a.args || {};
   const text = args.command || args.code || args.path || args.url || '';
-  return text ? h('code.ja-arg', String(text).slice(0, 160)) : null;
+  return [text ? h('code.ja-arg', String(text).slice(0, 160)) : null, a.why ? h('span.ja-why', a.why) : null];
 }
 
-async function decide(id, decision) {
+async function decide(id, decision, note = '') {
   try {
-    await api.post('/api/approvals/' + id, { decision });
+    await api.post('/api/approvals/' + id, { decision, note });
   } catch (e) {
     toast(e.message, 'error');
   }

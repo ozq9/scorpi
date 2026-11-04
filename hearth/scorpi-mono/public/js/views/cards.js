@@ -85,8 +85,8 @@ const renderers = {
     const title = files.length === 1 ? files[0].path.split('/').pop() : files.length + ' files';
     const problems = (d.checks || '').startsWith('PROBLEMS');
     return h(
-      'div.card.diff',
-      head('diff', title, diffStat(add, del)),
+      'div.card.diff' + (files.length === 1 ? '.single' : ''),
+      files.length === 1 ? null : head('diff', title, diffStat(add, del)), // one file: its own header says it all
       diffList(files, { open: files.length <= 2 }),
       d.checks ? h('div.diff-checks' + (problems ? '.bad' : '.good'), icon(problems ? 'x' : 'check'), h('span', d.checks.replace(/^PROBLEMS FOUND — fix them now:\n/, ''))) : null,
     );

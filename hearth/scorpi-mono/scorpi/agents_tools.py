@@ -172,18 +172,20 @@ def _agent_names():
         "title": "string: Short job title, e.g. 'Bakery website'",
         "project?": "string: Project/folder name for coding jobs; reuse the same name to continue an earlier project",
         "model?": "string: Only when the user names a model for this job, as they said it (e.g. 'deepseek flash 4.1', 'glm 5'); omit otherwise",
+        "plan_first?": "boolean: The user wants to see and approve a plan before the agent changes anything",
     },
     group="agents",
     risk="write",
 )
-def assign_agent(ctx, agent, task, title, project="", model=""):
+def assign_agent(ctx, agent, task, title, project="", model="", plan_first=False):
     try:
         ref = llm.find_model(model) if str(model or "").strip() else ""
-        job = agents.assign(agent, task, title=title, parent_conv=ctx.conv_id, project=project, model=ref)
+        job = agents.assign(agent, task, title=title, parent_conv=ctx.conv_id, project=project, model=ref, plan=bool(plan_first))
     except ValueError as exc:
         raise ToolError(str(exc))
     where = (" Project folder: %s." % job.workdir) if job.workdir else ""
     where += (" Model: %s." % llm._label(ref)) if ref else ""
+    where += " It first proposes a plan for the user to approve." if plan_first else ""
     return Result("%s is now working on '%s' in the background (job %s).%s Tell the user briefly that it's on it; you will get its "
                   "report when it finishes. Use agent_status to check progress." % (job.agent["name"], job.title, job.id, where),
                   display={"type": "agent_job", "id": job.id, "agent": job.agent["id"], "name": job.agent["name"],

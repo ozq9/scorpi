@@ -365,6 +365,13 @@ async function tools(body) {
       h('h3.section-title', 'Approvals', h('span.rule')),
       h('p.section-desc', 'Allow runs immediately. Ask pauses the agent and shows an approval card on every device. Off hides the tool. Reading is allowed by default; running code, controlling the PC, deleting and sending data ask first.'),
       h('div.panel.panel-pad', h('div.row', h('div.grow', h('div', { style: { fontWeight: 500 } }, 'Tool selection'), h('div.muted', { style: { fontSize: '13px' } }, 'Automatic sends only the tool groups a request needs (better for small models); the agent can load more itself.')), seg([['auto', 'Automatic'], ['all', 'All enabled']], data.mode, (v) => saveSettings({ tool_mode: v })))),
+      h(
+        'div.panel.panel-pad',
+        { style: { marginTop: '10px' } },
+        h('div.row', h('div.grow', h('div', { style: { fontWeight: 500 } }, 'Agent autonomy'), h('div.muted', { style: { fontSize: '13px' } }, 'For tools set to Ask: which commands agents may run without asking. Read-only commands never ask; commands that could wreck the PC (wiping a disk or the home folder) never run.')),
+          seg([['ask', 'Ask first'], ['auto', 'Auto'], ['full', 'Full auto']], s.autonomy || 'auto', (v) => saveSettings({ autonomy: v }))),
+        h('div.muted', { style: { fontSize: '12.5px', marginTop: '8px' } }, 'Auto: builds, tests and running the project go ahead, and file changes inside a coding project (each run can be undone in Changes → Checkpoints). Full auto: everything goes ahead except destructive commands like deleting folders or force pushes. In a project, Shift+Tab in the prompt box switches it, and Plan first has the coder propose a plan to approve before it builds.'),
+      ),
     ),
   );
   const groupsBox = h('div');

@@ -11,7 +11,7 @@ import threading
 import time
 import traceback
 
-from . import db, events, llm, usage
+from . import db, events, llm, safety, usage
 from .compact import Compactor
 from .config import SETTINGS, UPLOADS, WORKSPACE
 from .tools import TOOLS, Result, ToolError, base_dir, policy, schema_for, select_tools
@@ -93,6 +93,12 @@ SUBAGENTS = {
 }
 
 
+PLAN_MODE = """PLAN MODE — the user wants to review a plan before anything changes.
+1. Look around with the read-only tools (repo_map, grep, glob, read_file, git_read, web search...) until you understand the request and the code it touches. Tools that change files or run commands are not available in this mode.
+2. Call submit_plan with a concrete plan in Markdown: the goal in one line; what you found; numbered steps naming the files to add or change and how; how you will test it; open questions and risks. Keep it skimmable.
+3. If the user asks for changes, revise the plan and call submit_plan again. Once it is approved, stop: the building starts right after."""
+PLAN_TOOLS = {"submit_plan", "update_plan", "ask_expert", "enable_tools", "recall", "current_time", "calculate"}
+
 COMPUTER_GUIDE = """Operating the PC's GUI:
 - Look before acting: screenshot returns the screen with numbered boxes on clickable controls and the same controls as a text list. Act on them with element=N; use x,y pixels only for things without a number.
 - Be fast: put every step you can predict into one computer_actions call (e.g. click a field, type, press enter) and look once at the end. Look again before acting on UI that the steps change.
@@ -128,7 +134,7 @@ class Ctx:
 
 class Agent:
     def __init__(self, run, model=None, skill=None, groups=None, depth=0, label="", emit=None,
-                 persona=None, max_steps=None, auto_approve=False, pin_model="", workdir="", project=""):
+                 persona=None, max_steps=None, auto_approve=False, pin_model="", workdir="", project="", plan_mode=False):
         self.run = run
         # coding work (the Code skill, coder sub-agents) can run on its own model, e.g. an OpenCode Go plan;
         # a dedicated agent's own model (pin_model) wins over both
@@ -152,6 +158,9 @@ class Agent:
         self.switched = ""
         self.eyes = ""  # vision model describing images for a text-only model this turn
         self.seen = {}  # file -> modification time when this agent last read or wrote it (to notice others' changes)
+        self.plan_mode = plan_mode  # look around read-only and propose a plan for the user to approve (submit_plan)
+        self.approved_plan = ""
+        self.stop_after_tools = False  # a tool ended the turn (the plan was approved or rejected)
 
     def emit(self, event):
         self._emit(event)
@@ -253,6 +262,8 @@ class Agent:
             lines.extend(looks.prompt_sections())
         if self.skill:
             lines.append("ACTIVE SKILL — %s\n%s" % (self.skill["name"], self.skill["instructions"]))
+        if self.plan_mode:
+            lines.append(PLAN_MODE)
         if SETTINGS["system_prompt"] and host:
             lines.append("User's standing instructions:\n" + SETTINGS["system_prompt"])
         return "\n\n".join(lines)
@@ -295,6 +306,11 @@ class Agent:
                     messages.append({"role": "user", "content": "[New message from the user while you work — take it into account]\n" + note})
                     self.emit({"type": "notice", "text": "Message received: " + note[:200]})
             names, active = ([], set()) if self.no_tools else select_tools(user_text, self.groups_override, self.extra_groups, scope=self.scope())
+            if self.plan_mode:
+                names = [n for n in names if n in PLAN_TOOLS or TOOLS[n]["risk"] == "read"]
+                names += [n for n in ("submit_plan",) if n not in names and n in TOOLS]
+            else:
+                names = [n for n in names if n != "submit_plan"]
             if "computer" in active and COMPUTER_GUIDE not in messages[0]["content"]:
                 messages[0]["content"] += "\n\n" + COMPUTER_GUIDE
             tools = [schema_for(n) for n in names] if names and step < max_steps else None
@@ -339,6 +355,8 @@ class Agent:
                 messages.append({"role": "tool", "name": call["name"], "tool_call_id": call["id"], "content": (result.text or "")[:16000]})
                 if result.images:
                     images.extend(result.images[:2])
+            if self.stop_after_tools:
+                break  # the plan was approved (the job starts building) or rejected
             if images and not self.cancelled():
                 model, caps = self._show_images(model, caps, images[-2:], messages)
         return "\n\n".join(texts)
@@ -445,12 +463,21 @@ class Agent:
             result = Result("Unknown tool %r. Use enable_tools to load more tools." % name, ok=False)
         else:
             mode = policy(name)
-            if mode == "off":
+            verdict, why = self._permission(name, args, mode)
+            if self.plan_mode and entry["risk"] != "read" and name not in PLAN_TOOLS:
+                result = Result("Plan mode: nothing may change yet. Look around with read-only tools, then call submit_plan.", ok=False)
+            elif mode == "off":
                 result = Result("The user has disabled the %s tool." % name, ok=False)
+            elif verdict == "block":
+                result = Result("Refused: this command %s. Scorpi never runs it. Find a safer way (e.g. delete only the specific "
+                                "files inside the project) or ask the user to do it themselves." % why, ok=False)
             else:
                 allowed = True
-                if mode == "ask" and self.run and not self.auto_approve:
-                    decision = events.request_approval(self.run, name, args, _describe(name, args))
+                if verdict == "ask" and self.run:
+                    summary = _describe(name, args)
+                    if why:
+                        summary["why"] = "This command %s." % why
+                    decision = events.request_approval(self.run, name, args, summary)
                     if decision == "always":
                         pol = dict(SETTINGS["tool_policy"] or {})
                         pol[name] = "allow"
@@ -466,6 +493,17 @@ class Agent:
         self.emit({"type": "tool_end", "id": call_id, "name": name, "ok": result.ok, "result": (result.text or "")[:2000],
                    "display": result.display, "elapsed": part["elapsed"], "agent": self.label})
         return result
+
+    def _permission(self, name, args, mode):
+        """("allow" | "ask" | "block", reason) for one tool call: the tool's policy, refined by the autonomy level for
+        commands, tests and code runs (harmless ones need no approval; ruinous ones never run)."""
+        if mode == "allow" and name == "run_shell":
+            level, why = safety.classify((args or {}).get("command"))
+            return ("block", why) if level == "blocked" else ("allow", "")
+        if mode != "ask":
+            return "allow", ""
+        autonomy = "full" if self.auto_approve else SETTINGS["autonomy"]
+        return safety.decide(name, args, autonomy, self.workdir)
 
     def _invoke(self, entry, args):
         fn = entry["fn"]
@@ -652,7 +690,7 @@ def context_note(context):
 
 
 def start_turn(conv_id, user_text, attachments=None, skill="", model="", groups=None, origin="chat", title_hint="", context=None,
-               agent_kwargs=None, note="", display="", command=""):
+               agent_kwargs=None, note="", display="", command="", system=""):
     """Store the user message and start a Run in a thread. Returns the Run.
     agent_kwargs configure a dedicated agent; note marks a message Scorpi wrote itself (shown as a small note, not a bubble).
     display: what the chat shows instead of user_text (a plugin's slash command: "/game", while its full prompt goes to the model)."""
@@ -661,6 +699,8 @@ def start_turn(conv_id, user_text, attachments=None, skill="", model="", groups=
     base_data = {"attachments": attachments or [], "skill": skill}
     if note:
         base_data["note"] = note
+    if system:
+        base_data["system"] = system  # a run Scorpi started itself: the chat shows this line instead of the prompt
     if display and command:
         base_data["command"] = command
     if context and context.get("kind") in ("window", "element"):

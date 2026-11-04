@@ -147,7 +147,9 @@ def approvals_snapshot():
         return list(APPROVALS.values())
 
 
-def request_approval(run, tool, args, summary, timeout=600):
+def request_approval(run, tool, args, summary, timeout=600, with_note=False):
+    """Ask the user to allow an action; blocks until they decide. Returns "allow", "always" or "deny", or
+    (decision, note) with with_note=True (a plan review: the user may approve or ask for changes in words)."""
     approval = {
         "id": uuid.uuid4().hex[:12],
         "run_id": run.id if run else "",
@@ -158,6 +160,7 @@ def request_approval(run, tool, args, summary, timeout=600):
         "created": time.time(),
         "event": threading.Event(),
         "decision": None,
+        "note": "",
     }
     with _approvals_lock:
         APPROVALS[approval["id"]] = approval
@@ -174,17 +177,18 @@ def request_approval(run, tool, args, summary, timeout=600):
         APPROVALS.pop(approval["id"], None)
     decision = approval["decision"] or "deny"
     if run:
-        run.emit({"type": "approval_done", "id": approval["id"], "decision": decision})
-    publish("approval_done", {"id": approval["id"], "decision": decision})
-    return decision
+        run.emit({"type": "approval_done", "id": approval["id"], "decision": decision, "note": approval["note"]})
+    publish("approval_done", {"id": approval["id"], "decision": decision, "note": approval["note"]})
+    return (decision, approval["note"]) if with_note else decision
 
 
-def resolve_approval(approval_id, decision):
+def resolve_approval(approval_id, decision, note=""):
     with _approvals_lock:
         approval = APPROVALS.get(approval_id)
         if not approval:
             return False
         approval["decision"] = decision
+        approval["note"] = str(note or "").strip()[:8000]
         approval["event"].set()
         return True
 
