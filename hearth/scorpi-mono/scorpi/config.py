@@ -50,6 +50,7 @@ DEFAULTS = {
     "coder_backend": "auto",  # auto (OpenCode when installed) | scorpi (Scorpi's own tools)
     "checkpoints": True,  # save a project's files before and after every agent run (scorpi/gitops.py), to look at or undo
     "autonomy": "auto",  # ask | auto | full: what agents may do without asking (scorpi/safety.py)
+    "hooks": [],  # the user's commands at fixed moments of an agent's work (scorpi/hooks.py)
     "github_token": "",  # the GitHub account the Code area and the coder use (scorpi/github.py)
     "user_name": "",
     # voice
@@ -182,6 +183,9 @@ class Settings:
                         continue
                 elif isinstance(default, str):
                     value = "" if value is None else str(value).strip()
+                elif isinstance(default, list):
+                    if not isinstance(value, list):
+                        continue
                 elif isinstance(default, dict):
                     if not isinstance(value, dict):
                         continue

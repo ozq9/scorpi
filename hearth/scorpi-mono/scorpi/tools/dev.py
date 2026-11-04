@@ -613,6 +613,7 @@ def apply_patch(ctx, patch):
     if root and os.path.isfile(root):
         root = os.path.dirname(root)
     touched = [p for p, _, after in planned if after is not None]
+    hooked, hook_failed = after_edit_hooks(touched)
     for p in touched:
         _seen(ctx, p, wrote=True)
     checks = codecheck.note(touched)
@@ -622,8 +623,23 @@ def apply_patch(ctx, patch):
         lines.append("%s %s" % (kind, path))
         if before is not None and after is not None:
             lines.append(diff_summary(before, after, 30))
-    text = "Applied the patch:\n" + "\n".join(lines) + ("\n\n" + checks if checks else "")
-    return Result(text, display=diff_display(planned, root, checks), files=touched)
+    text = "Applied the patch:\n" + "\n".join(lines) + ("\n\n" + checks if checks else "") + ("\n\n" + hooked if hooked else "")
+    return Result(text, display=diff_display(planned, root, checks), files=touched, ok=not checks.startswith("PROBLEMS") and not hook_failed)
+
+
+def after_edit_hooks(paths):
+    """The user's after_edit hooks (formatters, linters) for files the agent just wrote: (note, a blocking hook failed)."""
+    from .. import hooks
+    if not paths:
+        return "", False
+    results = hooks.run("after_edit", project_dir() or os.path.dirname(paths[0]), files=paths)
+    if not results:
+        return "", False
+    failed = hooks.blocking_failures(results)
+    note = hooks.summary(results)
+    if failed:
+        note += "\nA required hook failed: fix the problem it reports."
+    return note, bool(failed)
 
 
 def drop_bytecode(path):

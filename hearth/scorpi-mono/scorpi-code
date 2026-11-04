@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Scorpi's coding agent in the current folder:  scorpi-code [task]   (scorpi-code --help for options)
+# Uses the same models, keys and settings as the Scorpi app. Put this folder on your PATH, or link this file into it.
+SRC="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+DIR="$(cd "$(dirname "$SRC")" && pwd)"
+PY="$DIR/.venv/bin/python"
+[ -x "$PY" ] || PY="$(command -v python3 || command -v python)"
+PYTHONPATH="$DIR${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -m scorpi.cli "$@"

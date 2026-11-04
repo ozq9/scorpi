@@ -574,7 +574,7 @@ def settings_set(h):
                     "discord_presence", "discord_client_id", "port", "https_port", "fish_api_key", "fish_model", "fish_voice",
                     "tts_engine", "tts_voice", "desktop_notifications", "ntfy_topic", "auto_update", "update_url", "github_token", "checkpoints",
                     # a guest must not loosen what agents may do, nor point a provider at a server that would receive the key
-                    "autonomy", "cloud_urls", "cloud_accounts", "cloud_extra_models", "code_model", "expert_model", "coder_backend"):
+                    "autonomy", "cloud_urls", "cloud_accounts", "cloud_extra_models", "code_model", "expert_model", "coder_backend", "hooks"):
             patch.pop(key, None)
         for key in [k for k in patch if k.startswith("key_") or k == "cloud_anon"]:
             patch.pop(key, None)

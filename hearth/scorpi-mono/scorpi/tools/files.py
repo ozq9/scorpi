@@ -111,8 +111,12 @@ def read_file(ctx, path, start_line=1, max_lines=0, numbers=True):
 def _after_write(ctx, path, before, after, verb):
     """Result of a write or edit: what changed (a diff card), and the syntax checks of the new content."""
     from .. import codecheck
-    from .dev import _seen, diff_display, diff_summary
+    from .dev import _seen, after_edit_hooks, diff_display, diff_summary
     from . import project_dir
+    hooked, hook_failed = after_edit_hooks([path])
+    if hooked:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            after = fh.read()  # a formatter hook may have changed it
     _seen(ctx, path, wrote=True)
     checks = codecheck.note([path])
     summary = "%s %s (%s)" % (verb, path, human_size(os.path.getsize(path)))
@@ -122,9 +126,11 @@ def _after_write(ctx, path, before, after, verb):
             summary += "\n" + diff
     if checks:
         summary += "\n\n" + checks
+    if hooked:
+        summary += "\n\n" + hooked
     root = project_dir() or os.path.dirname(path)
     display = diff_display([(path, before, after)], root, checks) if before != after else file_card(path)
-    return Result(summary, display=display, files=[path], ok=not checks.startswith("PROBLEMS"))
+    return Result(summary, display=display, files=[path], ok=not checks.startswith("PROBLEMS") and not hook_failed)
 
 
 @tool(

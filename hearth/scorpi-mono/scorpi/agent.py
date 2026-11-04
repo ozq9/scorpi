@@ -11,7 +11,7 @@ import threading
 import time
 import traceback
 
-from . import db, events, llm, safety, usage
+from . import db, events, hooks, llm, safety, usage
 from .compact import Compactor
 from .config import SETTINGS, UPLOADS, WORKSPACE
 from .tools import TOOLS, Result, ToolError, base_dir, policy, schema_for, select_tools
@@ -134,7 +134,7 @@ class Ctx:
 
 class Agent:
     def __init__(self, run, model=None, skill=None, groups=None, depth=0, label="", emit=None,
-                 persona=None, max_steps=None, auto_approve=False, pin_model="", workdir="", project="", plan_mode=False):
+                 persona=None, max_steps=None, auto_approve=False, pin_model="", workdir="", project="", plan_mode=False, autonomy=""):
         self.run = run
         # coding work (the Code skill, coder sub-agents) can run on its own model, e.g. an OpenCode Go plan;
         # a dedicated agent's own model (pin_model) wins over both
@@ -159,6 +159,8 @@ class Agent:
         self.eyes = ""  # vision model describing images for a text-only model this turn
         self.seen = {}  # file -> modification time when this agent last read or wrote it (to notice others' changes)
         self.plan_mode = plan_mode  # look around read-only and propose a plan for the user to approve (submit_plan)
+        self.autonomy = autonomy  # ask | auto | full for this agent only ("" = the setting)
+        self.hook_rounds = 0  # times after_turn hooks sent the agent back to work this turn
         self.approved_plan = ""
         self.stop_after_tools = False  # a tool ended the turn (the plan was approved or rejected)
 
@@ -241,7 +243,15 @@ class Agent:
         count = knowledge.doc_count()
         if count:
             lines.append("The user's knowledge base holds %d document(s); search it with knowledge_search when questions may concern their own material." % count)
-        if self.persona:
+        if self.persona and self.persona.get("interactive"):
+            p = self.persona
+            lines.append(
+                "YOU ARE SCORPI'S CODING AGENT in the user's terminal, working in %s (relative paths and commands start there). "
+                "The user watches your steps and approves risky ones. Work autonomously on what they ask: look before you change "
+                "things, keep update_plan current for bigger tasks, verify your work, and end with a short report of what you "
+                "did and how to check it. Ask only when a choice really matters." % p["workdir"]
+                + ("\n\nYour role:\n" + p["instructions"] if p.get("instructions") else ""))
+        elif self.persona:
             p = self.persona
             lines.append(
                 "YOU ARE SCORPI'S %s AGENT, working in the background on a job the user handed over (usually through "
@@ -338,6 +348,11 @@ class Agent:
                 if self.depth == 0 and self.run and self.run.inbox and step < max_steps - 1:
                     messages.append({"role": "assistant", "content": text or ""})
                     continue  # the user wrote while this answer streamed: carry on with their message
+                feedback = self._turn_hooks() if step < max_steps - 1 and not self.cancelled() and not self.plan_mode else ""
+                if feedback:
+                    messages.append({"role": "assistant", "content": text or ""})
+                    messages.append({"role": "user", "content": feedback})
+                    continue  # a required check failed: keep working
                 break
             messages.append({"role": "assistant", "content": text or "", "tool_calls": calls})
             images = []
@@ -483,8 +498,11 @@ class Agent:
                         pol[name] = "allow"
                         SETTINGS.update({"tool_policy": pol})
                     allowed = decision in ("allow", "always")
+                blocked = self._command_hooks(name, args) if allowed else ""
                 if not allowed:
                     result = Result("The user declined this action. Do not retry it; continue without it or ask what they prefer.", ok=False)
+                elif blocked:
+                    result = Result(blocked, ok=False)
                 else:
                     result = self._invoke(entry, args)
         part.update({"status": "done" if result.ok else "error", "ok": result.ok, "result": (result.text or "")[:2000],
@@ -494,6 +512,33 @@ class Agent:
                    "display": result.display, "elapsed": part["elapsed"], "agent": self.label})
         return result
 
+    def _command_hooks(self, name, args):
+        """before_command hooks: "" to go ahead, or why a blocking hook stopped the command."""
+        if name != "run_shell":
+            return ""
+        command = str((args or {}).get("command") or "")
+        results = hooks.run("before_command", self.workdir or WORKSPACE, command=command)
+        failed = hooks.blocking_failures(results)
+        if not failed:
+            return ""
+        self.emit({"type": "notice", "text": "A hook stopped a command: %s" % hooks.label(failed[0])})
+        return "A hook of the user's stopped this command:\n%s\nDo it differently, or tell the user why it is needed." % hooks.summary(failed)
+
+    def _turn_hooks(self):
+        """after_turn hooks when the agent is about to finish in a project: a message sending it back to work when a
+        blocking one fails (at most twice), else ""."""
+        if self.depth or not self.workdir or self.hook_rounds >= 2:
+            return ""
+        results = hooks.run("after_turn", self.workdir)
+        if not results:
+            return ""
+        failed = hooks.blocking_failures(results)
+        self.emit({"type": "notice", "text": "Hooks: " + ", ".join("%s %s" % (hooks.label(r), "ok" if r["ok"] else "failed") for r in results)})
+        if not failed:
+            return ""
+        self.hook_rounds += 1
+        return ("[Before you finish, the user's required checks ran and failed. Fix the cause, then finish.]\n" + hooks.summary(failed))
+
     def _permission(self, name, args, mode):
         """("allow" | "ask" | "block", reason) for one tool call: the tool's policy, refined by the autonomy level for
         commands, tests and code runs (harmless ones need no approval; ruinous ones never run)."""
@@ -502,7 +547,7 @@ class Agent:
             return ("block", why) if level == "blocked" else ("allow", "")
         if mode != "ask":
             return "allow", ""
-        autonomy = "full" if self.auto_approve else SETTINGS["autonomy"]
+        autonomy = "full" if self.auto_approve else (self.autonomy or SETTINGS["autonomy"])
         return safety.decide(name, args, autonomy, self.workdir)
 
     def _invoke(self, entry, args):

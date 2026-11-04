@@ -374,6 +374,7 @@ async function tools(body) {
       ),
     ),
   );
+  body.appendChild(hooksSection());
   const groupsBox = h('div');
   body.appendChild(groupsBox);
   for (const g of data.groups) {
@@ -413,6 +414,75 @@ async function tools(body) {
 }
 
 const lines = (v) => v.split('\n').map((x) => x.trim()).filter(Boolean);
+
+// ---------- hooks: the user's own commands at fixed moments of an agent's work (scorpi/hooks.py) ----------
+
+const HOOK_EVENTS = [
+  ['after_edit', 'After edits', 'Runs after the agent writes or edits files. Match: file patterns like *.py *.ts.'],
+  ['before_command', 'Before commands', 'Runs before a shell command. Match: a regular expression on the command. A required hook that fails stops it.'],
+  ['after_turn', 'Before finishing', 'Runs when the agent is about to finish in a project. A required hook that fails sends it back to work.'],
+];
+const HOOK_EXAMPLES = [
+  { name: 'Format Python', event: 'after_edit', match: '*.py', command: 'ruff format {files}' },
+  { name: 'Prettier', event: 'after_edit', match: '*.js *.ts *.tsx *.css *.html *.json', command: 'npx --yes prettier --write {files}' },
+  { name: 'Tests must pass', event: 'after_turn', match: '', command: 'npm test', block: true },
+  { name: 'No publishing', event: 'before_command', match: 'npm publish|cargo publish|twine upload', command: 'echo Publishing is done by hand; exit 1', block: true },
+];
+
+function hooksSection() {
+  const box = h('div.section');
+  const render = () => {
+    const list = state.settings.hooks || [];
+    const save = (next, msg) => saveSettings({ hooks: next }, msg).then(render);
+    box.replaceChildren(
+      h('h3.section-title', 'Hooks', h('span.rule'), h('button.btn.quiet.small', { onclick: () => hookSheet(null, (hk) => save([...list, hk], 'Hook added')) }, icon('plus'), 'Add hook')),
+      h('p.section-desc', 'Your own commands that run every time at a fixed moment of an agent\'s work: a formatter after edits, a policy check before commands, tests before it finishes. They run in the project folder; {file}, {files} and {project} are filled in.'),
+      list.length
+        ? h('div.panel', list.map((hk, i) => h('div.list-row',
+            h('span.f-ic', icon(hk.event === 'after_edit' ? 'edit' : hk.event === 'before_command' ? 'shield' : 'check')),
+            h('div.lr-main', h('div.lr-title', hk.name || hk.command, hk.block ? h('span.badge', { style: { marginLeft: '8px' } }, 'required') : null),
+              h('div.lr-sub.mono', (HOOK_EVENTS.find(([k]) => k === hk.event) || [, hk.event])[1] + (hk.match ? ' · ' + hk.match : '') + ' · ' + hk.command)),
+            h('div.lr-actions',
+              switchEl(hk.enabled !== false, (on) => save(list.map((x, j) => (j === i ? { ...x, enabled: on } : x)))),
+              h('button.icon-btn', { title: 'Edit', onclick: () => hookSheet(hk, (edited) => save(list.map((x, j) => (j === i ? edited : x)), 'Hook saved')) }, icon('edit')),
+              h('button.icon-btn', { title: 'Delete', onclick: () => save(list.filter((_, j) => j !== i), 'Hook removed') }, icon('trash'))))))
+        : h('div.panel.panel-pad', h('div.muted', { style: { fontSize: '13px', marginBottom: '10px' } }, 'No hooks yet. Start from an example:'),
+            h('div.row', { style: { flexWrap: 'wrap', gap: '8px' } }, HOOK_EXAMPLES.map((ex) => h('button.btn.small', { onclick: () => hookSheet(ex, (hk) => save([...list, hk], 'Hook added')) }, icon('plus'), ex.name)))),
+    );
+  };
+  render();
+  return box;
+}
+
+function hookSheet(hook, onSave) {
+  const hk = { event: 'after_edit', match: '', command: '', name: '', block: false, enabled: true, timeout: 120, ...(hook || {}) };
+  const name = h('input.input', { value: hk.name, placeholder: 'e.g. Format Python' });
+  const match = h('input.input', { value: hk.match, placeholder: '*.py *.ts (after edits) or a regex (before commands)' });
+  const command = h('input.input.mono', { value: hk.command, placeholder: 'ruff format {files}' });
+  const timeout = h('input.input', { type: 'number', min: 5, max: 1800, value: hk.timeout });
+  let event = hk.event;
+  let block = !!hk.block;
+  const desc = h('div.muted', { style: { fontSize: '12.5px', margin: '-4px 0 12px' } });
+  const showDesc = () => (desc.textContent = (HOOK_EVENTS.find(([k]) => k === event) || [])[2] || '');
+  showDesc();
+  sheet({
+    title: hook && hook.command ? 'Edit hook' : 'Add a hook',
+    body: h('div',
+      field('When', seg(HOOK_EVENTS.map(([k, label]) => [k, label]), event, (v) => { event = v; showDesc(); })),
+      desc,
+      field('Command', command, 'Runs in the project folder (PowerShell on Windows, bash elsewhere).'),
+      h('div.grid-2', field('Match (optional)', match), field('Name (optional)', name)),
+      h('div.grid-2', field('Timeout (seconds)', timeout), field('Required', switchEl(block, (v) => (block = v)), 'A failure counts: it stops the command, or sends the agent back to work.'))),
+    foot: (close) => [
+      h('button.btn.quiet', { onclick: close }, 'Cancel'),
+      h('button.btn.primary', { onclick: () => {
+        if (!command.value.trim()) return command.focus();
+        close();
+        onSave({ ...hk, event, block, name: name.value.trim(), match: match.value.trim(), command: command.value.trim(), timeout: +timeout.value || 120 });
+      } }, 'Save'),
+    ],
+  });
+}
 
 function toolRow(t) {
   const risk = { read: ['reads', ''], write: ['changes data', '.warn'], danger: ['acts on the PC', '.err'] }[t.risk];

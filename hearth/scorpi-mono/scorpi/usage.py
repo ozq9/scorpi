@@ -56,7 +56,7 @@ PRICES = [
 CACHED_SHARE = 0.1  # cached input is billed at about a tenth of the input price
 SOURCES = ("chat", "agents", "code", "routines", "other")
 ORIGIN_SOURCE = {"chat": "chat", "agent": "agents", "agent_update": "agents", "task": "agents",
-                 "automation": "routines", "schedule": "routines"}
+                 "automation": "routines", "schedule": "routines", "cli": "code"}
 
 _tag = threading.local()
 
